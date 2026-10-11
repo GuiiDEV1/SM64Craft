@@ -8,4 +8,6 @@ SkyCraft/
 MarioCraft Launcher.exe
 launcher/cache/
 launcher/prism-path.txt
+launcher/rom-folder-path.txt
 launcher/setup.log
+dist/

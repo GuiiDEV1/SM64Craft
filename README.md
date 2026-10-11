@@ -4,13 +4,13 @@
 
 Play Super Mario 64 as Minecraft's Steve.
 
-**[⬇ Download the latest version](../../releases/latest)**: get `MarioCraft-<version>-source.zip` and follow [Install](#install).
+**[⬇ Download the latest version](https://github.com/GuiiDEV1/SM64Craft/releases/latest)**: put `MarioCraft-<version>.jar` in your Fabric instance's `mods` folder.
 
-> **Built on [SkyCraft](https://github.com/chasmlol/SkyCraft) by chasm.** SkyCraft came up with the idea of a hidden Minecraft playing inside another game, and built the link between them that MarioCraft uses. All credit for that goes to chasm. Go check out SkyCraft!
+> **Built on [SkyCraft](https://github.com/chasmlol/SkyCraft) by chasm.** SkyCraft's shared-memory bridge is the foundation MarioCraft adapts for Super Mario 64. All credit for that work goes to chasm. Go check out SkyCraft!
 
-MarioCraft runs Super Mario 64 (through [sm64coopdx](https://github.com/coop-deluxe/sm64coopdx)) with a hidden Minecraft running alongside it, the way SkyCraft does with Skyrim. Steve replaces Mario. He moves, fights, mines, builds and takes damage the Minecraft way, while everything in Mario's world (levels, enemies, bosses, stars, cannons, slides, caps) still works the SM64 way. You can beat the whole game as Steve, alone or with friends.
+MarioCraft runs [sm64coopdx](https://github.com/coop-deluxe/sm64coopdx) from Minecraft and displays its view in the Minecraft window. Steve replaces Mario. He moves, fights, mines, builds and takes damage the Minecraft way, while everything in Mario's world (levels, enemies, bosses, stars, cannons, slides, caps) still works the SM64 way. You can beat the whole game as Steve, alone or with friends.
 
-**No game files are included.** You build MarioCraft yourself from your own Super Mario 64 ROM, and play it with your own Minecraft: Java Edition account.
+**No ROM or native executable is included in the mod download.** Setup downloads the pinned official SM64 Coop DX Windows release and applies MarioCraft's bundled binary delta locally. The game reads your own USA ROM at runtime.
 
 > **Status: new and experimental.** Expect rough edges, and back up your saves (see [Your saves](#your-saves)). Found a bug? [Open an issue](../../issues/new/choose).
 > MarioCraft is a fan project. It isn't affiliated with Nintendo, Mojang Studios or Microsoft, and you need to own both games.
@@ -35,30 +35,27 @@ MarioCraft runs Super Mario 64 (through [sm64coopdx](https://github.com/coop-del
 
 ## You need
 
-- **Windows 10 or 11** (64-bit) and about 6 GB of free space.
+- **Windows 10 or 11** (64-bit), an internet connection, and 512 MB of free space for setup.
 - **Your own Super Mario 64 (USA) ROM** (a `.z64`, `.n64` or `.v64` file, any name).
-- **Minecraft: Java Edition** (an account that owns it) and **[Prism Launcher](https://prismlauncher.org)**, signed in to that account once.
-- **[MSYS2](https://www.msys2.org)**, installed to `C:\msys64`. This builds SM64; the installer adds the packages it needs.
-- **[Java 25](https://adoptium.net)** (Temurin JDK 25). This builds the Minecraft mod.
+- **Minecraft: Java Edition 26.3** with **Fabric Loader and Fabric API**. Fabric API must be installed in the instance before adding this JAR.
+- The Minecraft instance's **Java 25 runtime** (Minecraft 26.3 supplies this in current launchers).
 
 ## Install
 
-1. Install MSYS2, Java 25 and Prism Launcher (links above). Open Prism once and sign in to your Microsoft account. If you skip this, `install.bat` checks first: it opens the download page for anything missing and tells you exactly what to pick.
-2. Put the `MarioCraft` folder from the zip at **`C:\MarioCraft`**, or anywhere with a short path that has **no spaces**. SM64's build fails in folders like `C:\Users\John Smith\...` or deeply nested ones, and the installer will tell you if yours won't work.
-3. Put your Super Mario 64 (USA) ROM in that folder, next to `install.bat`. Any file name works, and `.z64`, `.n64` and `.v64` dumps are all accepted.
-4. Double-click **`install.bat`**.
+1. Put the MarioCraft JAR in that instance's `mods` folder and start Minecraft.
+2. On the title screen, click **Instalar dependências**. Click **Abrir pasta sm64craft** and copy your own USA ROM there. The supported formats are `.z64`, `.n64` and `.v64`; MarioCraft checks the ROM and leaves your original file unchanged.
+3. Click **Instalar dependências** again. MarioCraft downloads the official Windows release (about 42 MB), extracts it and applies its verified binary delta. No compiler or source checkout is needed for release packages. Keep Minecraft open and do not delete that folder while it is installing. Download time depends on your connection.
+4. When the button changes to **Reiniciar Minecraft**, click it to load the multiplayer helper. Then open **MarioCraft** from the title screen.
 
-The installer:
-1. downloads sm64coopdx v1.5.1 and SkyCraft v0.1.2 from GitHub;
-2. applies MarioCraft's changes from the `patches` folder;
-3. builds SM64 from your ROM and builds the Minecraft mod;
-4. adds a **MarioCraft** instance to Prism Launcher.
-
-The first run takes 20–40 minutes, and later runs are quick. To update MarioCraft, replace the `patches` folder (and the other files here) with a newer release and run `install.bat` again.
+Everything is kept in that Minecraft instance: the native game, per-instance saves and your ROM are in `.minecraft/sm64craft`; e4mc is installed beside the other mods. Temporary downloads are removed after setup, including failed attempts. The JAR contains the installer and patches, without a ROM or complete native executable. To update, replace the JAR in `mods` and restart Minecraft. Developers can explicitly use `install-native.ps1 -BuildFromSource`; that slower path needs 4 GB free space and removes its temporary compiler after building.
 
 ## Play
 
-Double-click **`MarioCraft Launcher.exe`** and press **Play**. SM64 opens, and Minecraft starts hidden in the background (the first start takes a minute). Steve's skin comes from the account signed in to Prism.
+Click **MarioCraft** on Minecraft's title screen. SM64 Coop DX starts from this instance and its frame appears inside Minecraft. Steve's skin comes from the account signed in to that launcher.
+
+### Minecraft View (experimental)
+
+The SM64 menu and gameplay render inside the Minecraft window. Keep Minecraft focused to play; the native process is started by the mod and closed when Minecraft exits.
 
 ### Controls
 
@@ -79,18 +76,26 @@ Minecraft's controls, plus:
 
 ### Multiplayer
 
-Everyone needs MarioCraft installed. One player hosts in sm64coopdx (Host on the main menu) and the others join as usual. Each player's Minecraft joins the host's world by itself, through e4mc. No Minecraft server or port forwarding is needed.
+Everyone needs the same MarioCraft package installed, their own USA ROM, and a Minecraft Java account. Start MarioCraft on each PC. One player hosts in sm64coopdx (Host on the main menu) and friends join that SM64 Coop DX session as usual. The mod then opens the host's Minecraft world to those players and joins their Minecraft instances through e4mc. No separate Minecraft server or manual port forwarding is needed. Both the SM64 executable and the Fabric mod must come from the same MarioCraft package.
+
+Use the same MarioCraft build on every PC: the Minecraft mod and SM64 executable must match, including the guest teleport messages. Three development clients on one PC were verified through e4mc, including independent phase transitions, blocks, inventory, death, star progress and reconnects. Version 0.1.10 also verified joining a real private CoopNet room by password and loading all 90 main-course missions with local development identities. Scripted two-client checks triggered the real DDD and WDW passages in both directions and confirmed the Minecraft collision regions loaded. Those checks position players at the real warp floors; walking the routes manually and play between separate PCs with Microsoft accounts remain unverified. The full campaign and every boss are outside this release check. See [the validation report](docs/MULTIPLAYER-VALIDATION.md) for evidence and limits.
 
 ### Your saves
 
-- **Mario progress:** `%APPDATA%\sm64coopdx\sm64_save_file.bin`
-- **Minecraft world:** the `saves\MarioCraft` folder in Prism's MarioCraft instance
+- Main-course missions have separate building regions from 0.1.10 onward, matching SM64's separate multiplayer instances. Older shared builds remain in mission 1; they are preserved rather than duplicated into every mission.
+- **Mario progress:** `sm64craft\saves` in the active Minecraft instance
+- **Minecraft world:** the instance's regular `saves` folder
+- **Your ROM:** `sm64craft\baserom.us.z64`. The original dump you copied is preserved beside it.
 
 ## If something goes wrong
 
-- **The installer stops with "PROBLEM: …"** It says what's missing. Fix that and run `install.bat` again.
-- **A build failed.** See `sm64coopdx-build.log` or `minecraft-mod-build.log` in this folder.
-- **"Prism Launcher wasn't found."** Install Prism (the normal installer, not the portable one), sign in once, then run `install.bat` again.
+- **The setup failed.** Open `.minecraft\sm64craft\install.log`; temporary build files are removed, and the next attempt starts cleanly.
+- **Minecraft/e4mc can't connect.** Check that the multiplayer helper loaded after restarting and that the host opened their world to LAN. If Windows asks about Java's firewall access, allow private-network access.
+- **Minecraft crashed or the mod didn't load.** Read `logs\latest.log` in that instance's `.minecraft` folder.
+
+## Uninstall
+
+Close Minecraft. To remove the mod, delete its JAR from `mods`. To remove the native game, ROM and SM64 saves too, delete that instance's `.minecraft\sm64craft` folder.
 
 ## Credits
 
@@ -99,5 +104,7 @@ Everyone needs MarioCraft installed. One player hosts in sm64coopdx (Host on the
 - **[Fabric](https://fabricmc.net)**, **[Fabric API](https://github.com/FabricMC/fabric)**, **[e4mc](https://github.com/vgskye/e4mc-minecraft-architectury)** and **[Prism Launcher](https://prismlauncher.org)**.
 
 MarioCraft's own code is under the MIT License (`LICENSE`). sm64coopdx and SkyCraft stay under their own terms. See `THIRD-PARTY-NOTICES.md` and the `licenses` folder.
+
+Development disclosure: OpenAI Codex (GPT-6) assisted with implementation, testing and documentation. No game art or audio is generated or bundled by MarioCraft.
 
 MarioCraft is a fan project. It is not affiliated with or endorsed by Nintendo, Mojang Studios or Microsoft. Super Mario 64 is a trademark of Nintendo; Minecraft is a trademark of Mojang Studios. No Nintendo or Mojang game data is included. Super Mario 64 comes from your own ROM, and Minecraft (with its music) from your own copy of the game.

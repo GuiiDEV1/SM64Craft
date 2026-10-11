@@ -183,6 +183,18 @@ index 1e1641348..cacbb6435 100644
      print_text(GFX_DIMENSIONS_RECT_FROM_LEFT_EDGE(38), HUD_TOP_Y, "*"); // 'X' glyph
      print_text_fmt_int(GFX_DIMENSIONS_RECT_FROM_LEFT_EDGE(54), HUD_TOP_Y, "%d", gHudDisplay.lives);
  }
+diff --git a/src/game/interaction.c b/src/game/interaction.c
+--- a/src/game/interaction.c
++++ b/src/game/interaction.c
+@@ -2057,6 +2057,8 @@
+ 
+ u32 interact_pole(struct MarioState *m, UNUSED u32 interactType, struct Object *o) {
+     if (!m || !o) { return FALSE; }
++    extern bool mariocraft_blocks_pole_grab(struct MarioState *, struct Object *);
++    if (mariocraft_blocks_pole_grab(m, o)) return FALSE;
+     s32 actionId = m->action & ACT_ID_MASK;
+     if (actionId >= 0x080 && actionId < 0x0A0) {
+         if (!(m->prevAction & ACT_FLAG_ON_POLE) || m->usedObj != o) {
 diff --git a/src/game/level_geo.c b/src/game/level_geo.c
 index 47c727225..76040593f 100644
 --- a/src/game/level_geo.c
@@ -214,10 +226,9 @@ index 47c727225..76040593f 100644
  
      return gfx;
 diff --git a/src/game/level_update.c b/src/game/level_update.c
-index 02b821633..9e1c0fa7f 100644
 --- a/src/game/level_update.c
 +++ b/src/game/level_update.c
-@@ -829,6 +829,10 @@ static void initiate_painting_warp_node(struct WarpNode *pWarpNode) {
+@@ -829,6 +829,10 @@
      initiate_warp(warpNode.destLevel & 0x7F, warpNode.destArea, warpNode.destNode, 0);
      check_if_should_set_warp_checkpoint(&warpNode);
  
@@ -228,6 +239,15 @@ index 02b821633..9e1c0fa7f 100644
      extern s16 gMenuMode;
      if (gMenuMode == -1) {
          play_transition_after_delay(WARP_TRANSITION_FADE_INTO_COLOR, 30, 255, 255, 255, 45);
+@@ -845,6 +849,8 @@
+  * Check is Mario has entered a painting, and if so, initiate a warp.
+  */
+ void initiate_painting_warp(s16 paintingIndex) {
++    extern bool mariocraft_blocks_painting_warp(void);
++    if (mariocraft_blocks_painting_warp()) return;
+     if (gCurrentArea && gCurrentArea->paintingWarpNodes && gMarioState && gMarioState->floor && paintingIndex >= -1 && paintingIndex < MAX_PAINTING_WARP_NODES) {
+         struct WarpNode *pWarpNode = paintingIndex == -1 ? get_painting_warp_node() : &gCurrentArea->paintingWarpNodes[paintingIndex];
+ 
 diff --git a/src/game/mario.c b/src/game/mario.c
 index 3e7135352..a417947d7 100644
 --- a/src/game/mario.c
@@ -425,6 +445,25 @@ index 82d0da8f7..e24b63e1f 100644
          gCurGraphNodeCamera = NULL;
          sUsingCamSpace = FALSE;
      }
+diff --git a/src/game/save_file.c b/src/game/save_file.c
+--- a/src/game/save_file.c
++++ b/src/game/save_file.c
+@@ -6,6 +6,7 @@
+ #include "area.h"
+ #include "level_update.h"
+ #include "save_file.h"
++#include "pc/mariocraft/mariocraft.h"
+ #include "sound_init.h"
+ #include "level_table.h"
+ #include "course_table.h"
+@@ -433,6 +434,7 @@
+ 
+ void save_file_erase(s32 fileIndex) {
+     if (INVALID_FILE_INDEX(fileIndex)) { return; }
++    if (!mariocraft_erase_save(fileIndex)) { return; }
+ 
+     touch_high_score_ages(fileIndex);
+     bzero(&gSaveBuffer.files[fileIndex][0], sizeof(gSaveBuffer.files[fileIndex][0]));
 diff --git a/src/menu/star_select.c b/src/menu/star_select.c
 index f3f651e2f..63690dcbd 100644
 --- a/src/menu/star_select.c
@@ -455,10 +494,9 @@ index f3f651e2f..63690dcbd 100644
          // If any of these buttons are pressed, play sound and go to course act
  #ifndef VERSION_EU
 diff --git a/src/pc/controller/controller_keyboard.c b/src/pc/controller/controller_keyboard.c
-index 8542512fe..879bd512d 100644
 --- a/src/pc/controller/controller_keyboard.c
 +++ b/src/pc/controller/controller_keyboard.c
-@@ -34,6 +34,13 @@ static int keyboard_map_scancode(int scancode) {
+@@ -34,6 +34,13 @@
  }
  
  bool keyboard_on_key_down(int scancode) {
@@ -472,7 +510,7 @@ index 8542512fe..879bd512d 100644
      djui_panel_pause_disconnect_key_update(scancode);
  
      // see if interactable captures this scancode
-@@ -63,6 +70,9 @@ void keyboard_on_all_keys_up(void) {
+@@ -63,6 +70,9 @@
  }
  
  void keyboard_on_text_input(char* text) {
@@ -482,11 +520,41 @@ index 8542512fe..879bd512d 100644
      djui_interactable_on_text_input(text);
  }
  
+@@ -112,6 +122,12 @@
+ 
+ static void keyboard_read(OSContPad *pad) {
+     pad->button |= keyboard_buttons_down;
++    // Minecraft View keeps keyboard focus in Minecraft, so SM64 never receives key-down
++    // events directly. Relay Space/left-click only while an SM64 dialog needs confirmation.
++    extern bool mariocraft_dialog_confirm_down(void);
++    if (mariocraft_dialog_confirm_down()) {
++        pad->button |= A_BUTTON;
++    }
+     const u32 xstick = keyboard_buttons_down & STICK_XMASK;
+     const u32 ystick = keyboard_buttons_down & STICK_YMASK;
+     if (xstick == STICK_LEFT)
 diff --git a/src/pc/controller/controller_mouse.c b/src/pc/controller/controller_mouse.c
-index 44a7a4c4f..12a97ba94 100644
 --- a/src/pc/controller/controller_mouse.c
 +++ b/src/pc/controller/controller_mouse.c
-@@ -134,6 +134,10 @@ void controller_mouse_read_relative(void) {
+@@ -65,6 +65,17 @@
+ 
+ void controller_mouse_read_window(void) {
+     if (!mouse_init_ok) { return; }
++
++    // MarioCraft View relays the pointer from Minecraft while SM64's native window is hidden.
++    extern bool mariocraft_read_host_menu_mouse(s32 *x, s32 *y, u32 *buttons);
++    s32 host_x, host_y;
++    u32 host_buttons;
++    if (mariocraft_read_host_menu_mouse(&host_x, &host_y, &host_buttons)) {
++        mouse_window_x = host_x;
++        mouse_window_y = host_y;
++        mouse_window_buttons = host_buttons;
++        return;
++    }
+ 
+ #if defined(_WIN32)
+     if (gWindowApi == &gfx_dxgi) {
+@@ -134,6 +145,10 @@
      mouse_buttons = SDL_GetRelativeMouseState(&mouse_x, &mouse_y);
  #endif
  
@@ -497,6 +565,13 @@ index 44a7a4c4f..12a97ba94 100644
      if (mouse_scroll_y > 0) {
          mouse_buttons |= MWHEELUP;
      } else if (mouse_scroll_y < 0) {
+@@ -186,4 +201,4 @@
+     mouse_scroll_timestamp = gGlobalTimer;
+     mouse_scroll_x += x;
+     mouse_scroll_y += y;
+-}
+\ No newline at end of file
++}
 diff --git a/src/pc/controller/controller_sdl.c b/src/pc/controller/controller_sdl.c
 index 29f48eaba..460d8257e 100644
 --- a/src/pc/controller/controller_sdl.c
@@ -539,17 +614,16 @@ index 400c50f93..e04d6c7b4 100644
      djui_popup_update();
  
 diff --git a/src/pc/djui/djui_panel_main.c b/src/pc/djui/djui_panel_main.c
-index 0a849bb51..4674ba9c5 100644
 --- a/src/pc/djui/djui_panel_main.c
 +++ b/src/pc/djui/djui_panel_main.c
-@@ -25,11 +25,14 @@ static void djui_panel_main_quit(struct DjuiBase* caller) {
+@@ -25,11 +25,14 @@
  }
  
  void djui_panel_main_create(struct DjuiBase* caller) {
 -    struct DjuiThreePanel* panel = djui_panel_menu_create(configExCoopTheme ? "\\#ff0800\\SM\\#1be700\\64\\#00b3ff\\EX\n\\#ffef00\\COOP" : "", false);
-+    // MarioCraft: its own name instead of the coopdx logo (whose art has Mario in it).
++    // SM64Craft: its own name instead of the coopdx logo (whose art has Mario in it).
 +    bool mariocraftTitle = true;
-+    struct DjuiThreePanel* panel = djui_panel_menu_create(mariocraftTitle ? "\\#5dbb3a\\MARIO\\#9b6b43\\CRAFT"
++    struct DjuiThreePanel* panel = djui_panel_menu_create(mariocraftTitle ? "\\#5dbb3a\\SM64 \\#9b6b43\\CRAFT"
 +        : configExCoopTheme ? "\\#ff0800\\SM\\#1be700\\64\\#00b3ff\\EX\n\\#ffef00\\COOP" : "", false);
      {
          struct DjuiBase* body = djui_three_panel_get_body(panel);
@@ -559,7 +633,7 @@ index 0a849bb51..4674ba9c5 100644
                  struct DjuiImage* logo = djui_image_create(body, texture_coopdx_logo, 2048, 1024, G_IM_FMT_RGBA, G_IM_SIZ_32b);
                  if (configDjuiThemeCenter) {
                      djui_base_set_size(&logo->base, 550, 275);
-@@ -41,16 +44,17 @@ void djui_panel_main_create(struct DjuiBase* caller) {
+@@ -41,16 +44,17 @@
                  djui_base_set_location(&logo->base, 0, -30);
              }
  
@@ -602,6 +676,123 @@ index 7f65d5ff7..ce0083911 100644
  
      s16 pingValue = np->ping / 150;
      switch (pingValue) {
+diff --git a/src/pc/gfx/gfx_direct3d11.cpp b/src/pc/gfx/gfx_direct3d11.cpp
+--- a/src/pc/gfx/gfx_direct3d11.cpp
++++ b/src/pc/gfx/gfx_direct3d11.cpp
+@@ -27,6 +27,7 @@
+ 
+ extern "C" {
+     #include "pc/controller/controller_bind_mapping.h"
++    #include "../mariocraft/mariocraft.h"
+     extern Color gVertexColor;
+ }
+ 
+@@ -766,6 +767,74 @@
+ }
+ 
+ } // namespace
++
++// Optional GPU readback for the Minecraft-hosted view. Use a non-blocking staging read so a
++// slow copy drops a video frame instead of stalling SM64's simulation or co-op networking.
++extern "C" void mariocraft_gfx_d3d11_capture_frame(void) {
++    struct CaptureSlot {
++        ComPtr<ID3D11Texture2D> staging;
++        UINT width = 0;
++        UINT height = 0;
++        DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
++        bool pending = false;
++    };
++    static CaptureSlot slots[3];
++    static size_t nextSlot = 0;
++    constexpr size_t slotCount = sizeof(slots) / sizeof(slots[0]);
++
++
++    if (!d3d.device || !d3d.context || !d3d.swap_chain || !mariocraft_frame_capture_due()) {
++        return;
++    }
++
++    ComPtr<ID3D11Texture2D> backbuffer;
++    if (FAILED(d3d.swap_chain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **) backbuffer.GetAddressOf()))) return;
++    D3D11_TEXTURE2D_DESC desc = {};
++    backbuffer->GetDesc(&desc);
++    if (desc.Width == 0 || desc.Height == 0 || desc.Width > 7680 || desc.Height > 4320
++        || (desc.Format != DXGI_FORMAT_R8G8B8A8_UNORM && desc.Format != DXGI_FORMAT_B8G8R8A8_UNORM)) return;
++
++    // Read back completed copies without ever overwriting a staging texture that the GPU may
++    // still be filling. Re-copying into one busy texture each frame can make Map(DO_NOT_WAIT)
++    // return WAS_STILL_DRAWING forever, which freezes the last frame in Minecraft.
++    for (CaptureSlot &slot : slots) {
++        if (slot.pending) {
++            D3D11_MAPPED_SUBRESOURCE mapped = {};
++            HRESULT result = d3d.context->Map(slot.staging.Get(), 0, D3D11_MAP_READ,
++                                           D3D11_MAP_FLAG_DO_NOT_WAIT, &mapped);
++            if (SUCCEEDED(result)) {
++                mariocraft_publish_frame(slot.width, slot.height, mapped.pData, mapped.RowPitch,
++                                         slot.format == DXGI_FORMAT_B8G8R8A8_UNORM, false);
++                d3d.context->Unmap(slot.staging.Get(), 0);
++                slot.pending = false;
++            }
++        }
++    }
++
++    for (size_t offset = 0; offset < slotCount; ++offset) {
++        const size_t index = (nextSlot + offset) % slotCount;
++        CaptureSlot &slot = slots[index];
++        if (slot.pending) continue;
++        if (!slot.staging || slot.width != desc.Width || slot.height != desc.Height || slot.format != desc.Format) {
++            slot.staging.Reset();
++            D3D11_TEXTURE2D_DESC stagingDesc = desc;
++            stagingDesc.Usage = D3D11_USAGE_STAGING;
++            stagingDesc.BindFlags = 0;
++            stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
++            stagingDesc.MiscFlags = 0;
++            stagingDesc.SampleDesc.Count = 1;
++            stagingDesc.SampleDesc.Quality = 0;
++            if (FAILED(d3d.device->CreateTexture2D(&stagingDesc, nullptr, slot.staging.GetAddressOf()))) return;
++            slot.width = desc.Width;
++            slot.height = desc.Height;
++            slot.format = desc.Format;
++        }
++        d3d.context->CopyResource(slot.staging.Get(), backbuffer.Get());
++        slot.pending = true;
++        nextSlot = (index + 1) % slotCount;
++        return;
++    }
++}
+ 
+ struct GfxRenderingAPI gfx_direct3d11_api = {
+     gfx_d3d11_z_is_from_0_to_1,
+diff --git a/src/pc/gfx/gfx_dxgi.cpp b/src/pc/gfx/gfx_dxgi.cpp
+--- a/src/pc/gfx/gfx_dxgi.cpp
++++ b/src/pc/gfx/gfx_dxgi.cpp
+@@ -61,6 +61,8 @@
+ extern "C" f64 clock_elapsed_f64(void);
+ 
+ using namespace Microsoft::WRL; // For ComPtr
++
++extern "C" void mariocraft_gfx_d3d11_capture_frame(void);
+ 
+ static bool inTextInput = false;
+ 
+@@ -424,7 +426,9 @@
+ 
+     load_dxgi_library();
+ 
+-    ShowWindow(dxgi.h_wnd, SW_SHOW);
++    wchar_t embedded[2] = {};
++    bool embeddedView = GetEnvironmentVariableW(L"MARIOCRAFT_EMBEDDED_VIEW", embedded, 2) == 1 && embedded[0] == L'1';
++    if (!embeddedView) ShowWindow(dxgi.h_wnd, SW_SHOW);
+     UpdateWindow(dxgi.h_wnd);
+     if (configWindow.fullscreen) {
+         ShowCursor(FALSE);
+@@ -610,6 +614,7 @@
+ }
+ 
+ static void gfx_dxgi_swap_buffers_begin(void) {
++    mariocraft_gfx_d3d11_capture_frame();
+     ThrowIfFailed(dxgi.swap_chain->Present(dxgi.length_in_vsync_frames, 0));
+     //UINT this_present_id;
+     //if (dxgi.swap_chain->GetLastPresentCount(&this_present_id) == S_OK) {
 diff --git a/src/pc/gfx/gfx_pc.c b/src/pc/gfx/gfx_pc.c
 index 656343098..158a4c165 100644
 --- a/src/pc/gfx/gfx_pc.c
@@ -653,6 +844,71 @@ index 656343098..158a4c165 100644
 +            break;
      }
  }
+diff --git a/src/pc/gfx/gfx_sdl.c b/src/pc/gfx/gfx_sdl.c
+--- a/src/pc/gfx/gfx_sdl.c
++++ b/src/pc/gfx/gfx_sdl.c
+@@ -29,6 +29,8 @@
+ 
+ #include <stdio.h>
+ #include <unistd.h>
++#include <stdlib.h>
++#include <stdint.h>
+ 
+ #include "gfx_window_manager_api.h"
+ #include "gfx_screen_config.h"
+@@ -42,6 +44,7 @@
+ #include "pc/utils/misc.h"
+ #include "pc/mods/mod_import.h"
+ #include "pc/rom_checker.h"
++#include "../mariocraft/mariocraft.h"
+ 
+ #ifndef GL_MAX_SAMPLES
+ #define GL_MAX_SAMPLES 0x8D57
+@@ -311,7 +314,44 @@
+     return true;
+ }
+ 
++#ifdef _WIN32
++static void gfx_sdl_capture_mariocraft_frame(void) {
++    static uint8_t *pixels;
++    static size_t capacity;
++    if (!mariocraft_frame_capture_due()) return;
++
++    int width = 0, height = 0;
++    SDL_GL_GetDrawableSize(wnd, &width, &height);
++    if (width <= 0 || height <= 0 || width > 7680 || height > 4320) return;
++    size_t bytes = (size_t) width * (size_t) height * 4;
++    if (bytes / 4 != (size_t) width * (size_t) height) return;
++    if (bytes > capacity) {
++        uint8_t *next = (uint8_t *) realloc(pixels, bytes);
++        if (next == NULL) return;
++        pixels = next;
++        capacity = bytes;
++    }
++
++    GLint previousReadBuffer = GL_BACK;
++    GLint previousPackAlignment = 4;
++    glGetIntegerv(GL_READ_BUFFER, &previousReadBuffer);
++    glGetIntegerv(GL_PACK_ALIGNMENT, &previousPackAlignment);
++    while (glGetError() != GL_NO_ERROR) { }
++    glReadBuffer(GL_BACK);
++    glPixelStorei(GL_PACK_ALIGNMENT, 1);
++    glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
++    glPixelStorei(GL_PACK_ALIGNMENT, previousPackAlignment);
++    glReadBuffer(previousReadBuffer);
++    if (glGetError() == GL_NO_ERROR) {
++        mariocraft_publish_frame((uint32_t) width, (uint32_t) height, pixels, (uint32_t) width * 4, false, true);
++    }
++}
++#endif
++
+ static void gfx_sdl_swap_buffers_begin(void) {
++#ifdef _WIN32
++    gfx_sdl_capture_mariocraft_frame();
++#endif
+     SDL_GL_SwapWindow(wnd);
+ }
+ 
 diff --git a/src/pc/lua/utils/smlua_text_utils.c b/src/pc/lua/utils/smlua_text_utils.c
 index 328530b45..cfad23ca3 100644
 --- a/src/pc/lua/utils/smlua_text_utils.c
@@ -724,10 +980,9 @@ index 328530b45..cfad23ca3 100644
  
 diff --git a/src/pc/mariocraft/mariocraft.c b/src/pc/mariocraft/mariocraft.c
 new file mode 100644
-index 000000000..f16a27d9c
 --- /dev/null
 +++ b/src/pc/mariocraft/mariocraft.c
-@@ -0,0 +1,2473 @@
+@@ -0,0 +1,3046 @@
 +// MarioCraft link, SM64 side.
 +//
 +// Speaks SkyCraft's shared-memory protocol (version 11, protocol/skycraft_protocol.h in the
@@ -755,17 +1010,22 @@ index 000000000..f16a27d9c
 +#include <stdbool.h>
 +#include <string.h>
 +#include <stdio.h>
++#include "pc/fs/fs.h"
 +
 +#include "sm64.h"
 +#include "game/level_update.h"
 +#include "game/area.h"
 +#include "game/mario.h"
 +#include "engine/surface_collision.h"
++#include "engine/surface_load.h"
++#include "game/memory.h"
 +#include "engine/math_util.h"
 +#include "pc/djui/djui.h"
 +#include "pc/djui/djui_popup.h"
 +#include "pc/djui/djui_gfx.h"
 +#include "pc/controller/controller_mouse.h"
++#include "pc/controller/controller_keyboard.h"
++#include "pc/gfx/gfx.h"
 +#include "pc/gfx/gfx_window_manager_api.h"
 +#include "game/game_init.h"
 +#include "game/camera.h"
@@ -788,6 +1048,7 @@ index 000000000..f16a27d9c
 +
 +// SkyState flags
 +#define SKY_IN_GAME  (1u << 0)
++#define SKY_MENU_OPEN (1u << 1)
 +#define SKY_LOADING  (1u << 2)
 +#define SKY_PUPPET    (1u << 3)  // SM64 is carrying Steve: Minecraft keeps him at posX/Y/Z
 +#define SKY_WING_CAP  (1u << 4)  // MarioCraft: Mario has the wing cap: Steve can fly (double-tap Space)
@@ -796,6 +1057,7 @@ index 000000000..f16a27d9c
 +#define SKY_VANISH_CAP (1u << 7) // MarioCraft: ... the vanish cap
 +#define SKY_SLIDING   (1u << 8)  // MarioCraft: sliding down a slide (a puppet): Minecraft draws him sitting
 +#define SKY_WATER_LEVEL (1u << 9) // MarioCraft: an underwater level: Steve breathes in its water
++#define SKY_HIDE_MINECRAFT_HUD (1u << 10) // MarioCraft View: hide Minecraft's HUD during SM64 cutscenes
 +static uint32_t sSkyExtraFlags = 0;
 +static double sCarryPos[3];      // while SM64 carries Steve: where (Minecraft blocks)
 +
@@ -826,6 +1088,9 @@ index 000000000..f16a27d9c
 +    uint32_t teleportSeq;
 +    uint32_t viewportW, viewportH;
 +    float    gameHour;
++    uint32_t saveSlot;
++    uint32_t saveSchema;
++    uint64_t saveGeneration[4];
 +};
 +
 +// What Minecraft reports about Steve (McState in the protocol).
@@ -850,25 +1115,209 @@ index 000000000..f16a27d9c
 +    float    walkDistO, walkDist;
 +    float    bobO, bob;
 +    float    tickMs;
-+    uint32_t tickPad;
++    uint32_t jumpPressSeq;     // monotonically increasing Minecraft View jump presses
 +    uint32_t cameraMode;       // 0 first person, 1 third person behind, 2 third person in front
 +    float    cameraDistance;
 +};
 +#pragma pack(pop)
 +
 +_Static_assert(sizeof(struct McHeader) == 0x20, "header layout");
-+_Static_assert(sizeof(struct McSkyState) == 0x40, "SkyState layout");
++_Static_assert(sizeof(struct McSkyState) == 0x68, "SkyState layout");
 +_Static_assert(sizeof(struct McState) == 0xC8, "McState layout");
 +
 +static HANDLE sMapping = NULL;
 +uint8_t *gMcShm = NULL;
++
++// Standalone, opt-in frame stream. Kept out of MarioCraft's established v11 mapping so
++// old Minecraft clients and co-op sessions continue to use the exact same protocol.
++#define MC_FRAME_MAPPING_NAME L"Local\\MarioCraftFrame_v2"
++#define MC_FRAME_MAX_WIDTH 1280u
++#define MC_FRAME_MAX_HEIGHT 720u
++#define MC_FRAME_PIXELS_OFFSET 64u
++#define MC_FRAME_INPUT_OFFSET (MC_FRAME_PIXELS_OFFSET + (uint64_t) MC_FRAME_MAX_WIDTH * MC_FRAME_MAX_HEIGHT * 4u)
++#define MC_FRAME_INPUT_HEADER_BYTES 64u
++#define MC_FRAME_INPUT_ENTRIES 256u
++#define MC_FRAME_INPUT_ENTRY_BYTES 16u
++#define MC_FRAME_MAPPING_BYTES (MC_FRAME_INPUT_OFFSET + MC_FRAME_INPUT_HEADER_BYTES + (uint64_t) MC_FRAME_INPUT_ENTRIES * MC_FRAME_INPUT_ENTRY_BYTES)
++#define MC_FRAME_MAGIC 0x3146434Du /* "MCF1" */
++#define MC_VIEW_HOST_MODE (1u << 0)
++#define MC_VIEW_WINDOW_FOCUSED (1u << 1)
++#define MC_VIEW_LEFT_DOWN (1u << 2)
++#define MC_VIEW_RIGHT_DOWN (1u << 3)
++#define MC_VIEW_CONFIRM_DOWN (1u << 4)
++#define MC_VIEW_MENU_INPUT (1u << 5)
++#define MC_MENU_KEY_DOWN 1u
++#define MC_MENU_KEY_UP 2u
++#define MC_MENU_MOUSE_BUTTON 3u
++#define MC_MENU_SCROLL 4u
++#define MC_MENU_TEXT 5u
++
++#pragma pack(push, 1)
++struct McFrameHeader {
++    volatile uint32_t seq;
++    uint32_t magic;
++    uint32_t version;
++    uint32_t width;
++    uint32_t height;
++    uint32_t bytesPerPixel;
++    volatile uint64_t readerBeatMs;
++    uint64_t writerBeatMs;
++    uint64_t frameCounter;
++    uint8_t padding[16];
++};
++#pragma pack(pop)
++_Static_assert(sizeof(struct McFrameHeader) == MC_FRAME_PIXELS_OFFSET, "frame header layout");
++
++static HANDLE sFrameMapping = NULL;
++static struct McFrameHeader *sFrameHeader = NULL;
++static uint8_t *sFramePixels = NULL;
++static uint8_t *sFrameInput = NULL;
++static uint64_t sFrameCounter = 0;
++static uint64_t sLastFrameCaptureMs = 0;
++static bool sViewWindowHidden = false;
++
++// Separate instances on one PC must not overwrite one another's gameplay/video channel.
++static const wchar_t *mapping_name(const wchar_t *environment, const wchar_t *fallback, wchar_t *out, DWORD capacity) {
++    DWORD length = GetEnvironmentVariableW(environment, out, capacity);
++    return length > 0 && length < capacity ? out : fallback;
++}
++
++static void mariocraft_frame_init(void) {
++    wchar_t name[256];
++    LARGE_INTEGER size;
++    size.QuadPart = (LONGLONG) MC_FRAME_MAPPING_BYTES;
++    sFrameMapping = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE,
++                                       (DWORD) size.HighPart, (DWORD) size.LowPart,
++                                       mapping_name(L"MARIOCRAFT_FRAME_LINK", MC_FRAME_MAPPING_NAME, name, 256));
++    if (sFrameMapping == NULL) {
++        printf("[MarioCraft] optional Minecraft frame mapping unavailable (error %lu)\n", GetLastError());
++        return;
++    }
++    uint8_t *view = (uint8_t *) MapViewOfFile(sFrameMapping, FILE_MAP_ALL_ACCESS, 0, 0, 0);
++    if (view == NULL) {
++        printf("[MarioCraft] optional Minecraft frame view unavailable (error %lu)\n", GetLastError());
++        CloseHandle(sFrameMapping);
++        sFrameMapping = NULL;
++        return;
++    }
++    sFrameHeader = (struct McFrameHeader *) view;
++    sFramePixels = view + MC_FRAME_PIXELS_OFFSET;
++    sFrameInput = view + MC_FRAME_INPUT_OFFSET;
++    memset(view, 0, MC_FRAME_PIXELS_OFFSET);
++    memset(sFrameInput, 0, MC_FRAME_INPUT_HEADER_BYTES + MC_FRAME_INPUT_ENTRIES * MC_FRAME_INPUT_ENTRY_BYTES);
++    sFrameHeader->version = 2;
++    sFrameHeader->bytesPerPixel = 4;
++    MemoryBarrier();
++    sFrameHeader->magic = MC_FRAME_MAGIC;
++}
++
++bool mariocraft_frame_viewer_active(void) {
++    if (sFrameHeader == NULL) return false;
++    MemoryBarrier();
++    uint64_t beat = sFrameHeader->readerBeatMs;
++    uint64_t now = GetTickCount64();
++    return beat != 0 && now >= beat && now - beat <= 2000;
++}
++
++bool mariocraft_frame_capture_due(void) {
++    if (!mariocraft_frame_viewer_active()) return false;
++    uint64_t now = GetTickCount64();
++    if (sLastFrameCaptureMs != 0 && now - sLastFrameCaptureMs < 33) return false;
++    sLastFrameCaptureMs = now;
++    return true;
++}
++
++void mariocraft_publish_frame(uint32_t width, uint32_t height, const void *pixels, uint32_t pitch,
++                              bool bgra, bool flipVertical) {
++    if (sFrameHeader == NULL || pixels == NULL || width == 0 || height == 0
++        || width > 7680 || height > 4320 || pitch < (uint64_t) width * 4u) return;
++
++    uint32_t scaleX = (width + MC_FRAME_MAX_WIDTH - 1) / MC_FRAME_MAX_WIDTH;
++    uint32_t scaleY = (height + MC_FRAME_MAX_HEIGHT - 1) / MC_FRAME_MAX_HEIGHT;
++    uint32_t scale = scaleX > scaleY ? scaleX : scaleY;
++    uint32_t outWidth = (width + scale - 1) / scale;
++    uint32_t outHeight = (height + scale - 1) / scale;
++    const uint8_t *source = (const uint8_t *) pixels;
++    volatile LONG *sequence = (volatile LONG *) &sFrameHeader->seq;
++    InterlockedIncrement(sequence); // odd: Minecraft must ignore the frame while it is being copied
++    sFrameHeader->width = outWidth;
++    sFrameHeader->height = outHeight;
++    sFrameHeader->writerBeatMs = GetTickCount64();
++    sFrameHeader->frameCounter = ++sFrameCounter;
++    for (uint32_t y = 0; y < outHeight; y++) {
++        uint32_t sourceY = (uint32_t) (((uint64_t) y * height) / outHeight);
++        if (flipVertical) sourceY = height - 1 - sourceY;
++        const uint8_t *row = source + (uint64_t) sourceY * pitch;
++        uint8_t *dest = sFramePixels + (uint64_t) y * outWidth * 4u;
++        for (uint32_t x = 0; x < outWidth; x++) {
++            uint32_t sourceX = (uint32_t) (((uint64_t) x * width) / outWidth);
++            const uint8_t *pixel = row + (uint64_t) sourceX * 4u;
++            dest[x * 4u + 0] = pixel[bgra ? 2 : 0];
++            dest[x * 4u + 1] = pixel[1];
++            dest[x * 4u + 2] = pixel[bgra ? 0 : 2];
++            // SM64's D3D backbuffer leaves alpha undefined in parts of the scene. The Minecraft
++            // overlay must be opaque; an uninitialized zero alpha shows through as black holes.
++            dest[x * 4u + 3] = 255;
++        }
++    }
++    MemoryBarrier();
++    InterlockedIncrement(sequence); // even: publish the complete frame
++}
++
 +static uint32_t sLastMcPid = 0;
 +static uint32_t sSkySeq = 0;
 +static uint32_t sTeleportSeq = 1;
 +static uint32_t sEpoch = 1;
++static uint64_t sSaveGeneration[4];
++
++// Erase changes a durable world identity, so Minecraft can be offline and no live
++// chunks need to be deleted. The previous world remains available for recovery.
++bool mariocraft_erase_save(int fileIndex) {
++    if (fileIndex < 0 || fileIndex >= 4) return false;
++    FILETIME ft;
++    GetSystemTimeAsFileTime(&ft);
++    uint64_t next[4];
++    memcpy(next, sSaveGeneration, sizeof(next));
++    next[fileIndex] = ((uint64_t) ft.dwHighDateTime << 32) | ft.dwLowDateTime;
++    if (next[fileIndex] <= sSaveGeneration[fileIndex]) next[fileIndex] = sSaveGeneration[fileIndex] + 1;
++    char path[1024], temp[1024];
++    snprintf(path, sizeof(path), "%s/mariocraft-slots.dat", fs_writepath);
++    snprintf(temp, sizeof(temp), "%s/mariocraft-slots.tmp", fs_writepath);
++    FILE *f = fopen(temp, "wb");
++    bool ok = false;
++    if (f != NULL) {
++        ok = fwrite(next, sizeof(next), 1, f) == 1 && fflush(f) == 0;
++        if (fclose(f) != 0) ok = false;
++    }
++    if (ok) ok = MoveFileExA(temp, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
++    if (!ok) {
++        MessageBoxW(NULL, L"Couldn't save the Minecraft slot reset. Your SM64 save was kept. Check the save folder and try again.", L"MarioCraft", MB_ICONERROR);
++        return false;
++    }
++    memcpy(sSaveGeneration, next, sizeof(next));
++    return true;
++}
 +static uint32_t sLastWorldId = 0xFFFFFFFFu;
 +static bool sWasMcInWorld = false;
 +static uint32_t sExportedWorldId = 0xFFFFFFFFu;
++static uint32_t sExportedSurfaceGeneration = 0xFFFFFFFFu;
++static uint32_t sPendingGeometryWorld = 0xFFFFFFFFu;
++static uint32_t sPendingSurfaceGeneration = 0xFFFFFFFFu;
++
++// Level identifiers can change before the loader replaces the old area's surfaces.
++// Require a stable, non-empty surface pool before exporting it or choosing the spawn.
++static bool area_geometry_ready(uint32_t world, uint32_t generation, bool populated) {
++    if (!populated) {
++        sPendingGeometryWorld = 0xFFFFFFFFu;
++        return false;
++    }
++    if (world != sPendingGeometryWorld || generation != sPendingSurfaceGeneration) {
++        sPendingGeometryWorld = world;
++        sPendingSurfaceGeneration = generation;
++        return false;
++    }
++    return true;
++}
 +
 +// Steve
 +static struct McState sMc;          // latest consistent copy
@@ -877,6 +1326,10 @@ index 000000000..f16a27d9c
 +static float sYaw = 0, sPitch = 0;  // Steve's look, in Minecraft degrees
 +static float sLastPuppetPos[3];
 +static bool sHaveLastPuppetPos = false;
++static bool sReleaseVelocityPending = false;
++static int32_t sReleaseVelocity[3];
++static bool sPaintingExitGuard = false;
++static int sPaintingClearFrames = 0;
 +static uint32_t sWorldId = 0xFFFFFFFFu;
 +static bool sSteveHadControls = false;
 +static bool sSteveDead = false;       // Minecraft's death screen is up
@@ -918,10 +1371,20 @@ index 000000000..f16a27d9c
 +}
 +
 +void mariocraft_init(void) {
++    wchar_t name[256];
++    char slotsPath[1024];
++    snprintf(slotsPath, sizeof(slotsPath), "%s/mariocraft-slots.dat", fs_writepath);
++    FILE *slots = fopen(slotsPath, "rb");
++    if (slots != NULL) {
++        uint64_t saved[4];
++        if (fread(saved, sizeof(saved), 1, slots) == 1) memcpy(sSaveGeneration, saved, sizeof(saved));
++        fclose(slots);
++    }
 +    LARGE_INTEGER size;
 +    size.QuadPart = (LONGLONG) MAPPING_BYTES;
 +    sMapping = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE,
-+                                  (DWORD) size.HighPart, (DWORD) size.LowPart, MC_MAPPING_NAME);
++                                  (DWORD) size.HighPart, (DWORD) size.LowPart,
++                                  mapping_name(L"MARIOCRAFT_LINK", MC_MAPPING_NAME, name, 256));
 +    if (sMapping == NULL) {
 +        printf("[MarioCraft] couldn't create shared memory (error %lu)\n", GetLastError());
 +        return;
@@ -933,6 +1396,9 @@ index 000000000..f16a27d9c
 +        sMapping = NULL;
 +        return;
 +    }
++
++    // Optional Minecraft-hosted frame output; failure must never disable the classic link.
++    mariocraft_frame_init();
 +
 +    // Start from a clean slate, like a fresh Skyrim session: everything Minecraft reads is zeroed
 +    // (ring heads/tails, overlay control, actor table...). The big pixel/ring areas can stay.
@@ -1058,13 +1524,215 @@ index 000000000..f16a27d9c
 +static uint32_t sLastScrollStamp = 0;
 +static int32_t sCursorX = -1, sCursorY = -1;
 +static bool sScreenOpen = false;
++static bool sHostViewInputSuppressed = false;
++
++static bool host_view_enabled(void) {
++    return (sMc.pad4C & MC_VIEW_HOST_MODE) != 0;
++}
++
++static bool host_view_focused(void) {
++    return host_view_enabled() && (sMc.pad4C & MC_VIEW_WINDOW_FOCUSED) != 0;
++}
++
++static bool host_menu_input_active(void) {
++    return host_view_focused() && (sMc.pad4C & MC_VIEW_MENU_INPUT) != 0 && gDjuiInMainMenu;
++}
++
++static bool sHostMenuInputWasActive = false;
++static bool sHostMenuKeyDown[512];
++static bool sHostMenuKeyReleasePending[512];
++static uint32_t sHostMenuMouseButtons = 0;
++static uint32_t sHostMenuMouseReleasePending = 0;
++
++static char *host_menu_utf8(int32_t codepoint, char text[5]) {
++    uint32_t cp = (uint32_t) codepoint;
++    if (cp == 0 || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) return NULL;
++    if (cp < 0x80) {
++        text[0] = (char) cp; text[1] = '\0';
++    } else if (cp < 0x800) {
++        text[0] = (char) (0xC0 | (cp >> 6)); text[1] = (char) (0x80 | (cp & 0x3F)); text[2] = '\0';
++    } else if (cp < 0x10000) {
++        text[0] = (char) (0xE0 | (cp >> 12)); text[1] = (char) (0x80 | ((cp >> 6) & 0x3F));
++        text[2] = (char) (0x80 | (cp & 0x3F)); text[3] = '\0';
++    } else {
++        text[0] = (char) (0xF0 | (cp >> 18)); text[1] = (char) (0x80 | ((cp >> 12) & 0x3F));
++        text[2] = (char) (0x80 | ((cp >> 6) & 0x3F)); text[3] = (char) (0x80 | (cp & 0x3F)); text[4] = '\0';
++    }
++    return text;
++}
++
++static uint32_t host_menu_mouse_mask(int32_t button) {
++    switch (button) {
++        case 0: return MOUSE_BUTTON_1;
++        case 1: return MOUSE_BUTTON_3;
++        case 2: return MOUSE_BUTTON_2;
++        default: return 0;
++    }
++}
++
++static void host_menu_release_queued(void) {
++    for (int i = 0; i < (int) (sizeof(sHostMenuKeyDown) / sizeof(sHostMenuKeyDown[0])); i++) {
++        if (sHostMenuKeyReleasePending[i]) {
++            keyboard_on_key_up(i);
++            sHostMenuKeyDown[i] = false;
++            sHostMenuKeyReleasePending[i] = false;
++        }
++    }
++    sHostMenuMouseButtons &= ~sHostMenuMouseReleasePending;
++    sHostMenuMouseReleasePending = 0;
++}
++
++static void host_menu_input_update(void) {
++    if (sFrameInput == NULL) return;
++    if (InterlockedCompareExchange((volatile LONG *) (sFrameInput + 32), 0, 1) == 1) {
++        extern HWND gfx_dxgi_get_h_wnd(void);
++        HWND window = gfx_dxgi_get_h_wnd();
++        if (window != NULL) PostMessageW(window, WM_CLOSE, 0, 0);
++        return;
++    }
++    // Reserved frame-channel fields: keep the hidden render surface proportional
++    // to Minecraft without changing the gameplay/network bridge or menu ring.
++    if (mariocraft_frame_viewer_active()) {
++        volatile LONG *sizeSeq = (volatile LONG *) (sFrameInput + 20);
++        LONG before = InterlockedCompareExchange(sizeSeq, 0, 0);
++        if (before != 0 && !(before & 1)) {
++            int32_t width, height;
++            memcpy(&width, sFrameInput + 24, 4);
++            memcpy(&height, sFrameInput + 28, 4);
++            MemoryBarrier();
++            LONG after = InterlockedCompareExchange(sizeSeq, 0, 0);
++            if (before == after && width > 0 && height > 0 && width <= 960 && height <= 540) {
++                extern HWND gfx_dxgi_get_h_wnd(void);
++                HWND window = gfx_dxgi_get_h_wnd();
++                RECT client;
++                if (window != NULL && GetClientRect(window, &client)
++                    && (client.right != width || client.bottom != height)) {
++                    RECT outer = { 0, 0, width, height };
++                    AdjustWindowRectEx(&outer, (DWORD) GetWindowLongPtr(window, GWL_STYLE), FALSE,
++                        (DWORD) GetWindowLongPtr(window, GWL_EXSTYLE));
++                    SetWindowPos(window, NULL, 0, 0, outer.right - outer.left, outer.bottom - outer.top,
++                        SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER);
++                }
++            }
++        }
++    }
++    // The standalone renderer is only a hidden frame source in View mode. Visibility belongs
++    // to Minecraft and must not depend on which window currently owns input focus.
++    if (!sViewWindowHidden && host_view_enabled() && mariocraft_frame_viewer_active() && sFrameCounter >= 3) {
++        extern HWND gfx_dxgi_get_h_wnd(void);
++        HWND window = gfx_dxgi_get_h_wnd();
++        if (window != NULL && IsWindow(window)) {
++            ShowWindow(window, SW_HIDE);
++            sViewWindowHidden = true;
++        }
++    }
++    if (!host_menu_input_active()) {
++        if (sHostMenuInputWasActive) {
++            keyboard_on_all_keys_up();
++            memset(sHostMenuKeyDown, 0, sizeof(sHostMenuKeyDown));
++            memset(sHostMenuKeyReleasePending, 0, sizeof(sHostMenuKeyReleasePending));
++            sHostMenuMouseButtons = 0;
++            sHostMenuMouseReleasePending = 0;
++        }
++        sHostMenuInputWasActive = false;
++        volatile LONG *head = (volatile LONG *) (sFrameInput + 0);
++        volatile LONG *tail = (volatile LONG *) (sFrameInput + 4);
++        InterlockedExchange(tail, InterlockedCompareExchange(head, 0, 0)); // discard stale title-menu input
++        return;
++    }
++
++    sHostMenuInputWasActive = true;
++    host_menu_release_queued(); // preserve a brief press for one SM64 UI frame before its release
++    volatile LONG *headPtr = (volatile LONG *) (sFrameInput + 0);
++    volatile LONG *tailPtr = (volatile LONG *) (sFrameInput + 4);
++    uint32_t head = (uint32_t) InterlockedCompareExchange(headPtr, 0, 0);
++    uint32_t tail = (uint32_t) InterlockedCompareExchange(tailPtr, 0, 0);
++    MemoryBarrier();
++    while (tail != head) {
++        uint8_t *entry = sFrameInput + MC_FRAME_INPUT_HEADER_BYTES
++                       + (tail & (MC_FRAME_INPUT_ENTRIES - 1u)) * MC_FRAME_INPUT_ENTRY_BYTES;
++        int32_t type, a, b, c;
++        memcpy(&type, entry, 4); memcpy(&a, entry + 4, 4); memcpy(&b, entry + 8, 4); memcpy(&c, entry + 12, 4);
++        switch ((uint32_t) type) {
++            case MC_MENU_KEY_DOWN:
++                if (a >= 0 && a < (int32_t) (sizeof(sHostMenuKeyDown) / sizeof(sHostMenuKeyDown[0]))) {
++                    sHostMenuKeyReleasePending[a] = false;
++                    if (!sHostMenuKeyDown[a]) keyboard_on_key_down(a);
++                    sHostMenuKeyDown[a] = true;
++                }
++                break;
++            case MC_MENU_KEY_UP:
++                if (a >= 0 && a < (int32_t) (sizeof(sHostMenuKeyDown) / sizeof(sHostMenuKeyDown[0]))) {
++                    if (sHostMenuKeyDown[a]) sHostMenuKeyReleasePending[a] = true;
++                    else keyboard_on_key_up(a);
++                }
++                break;
++            case MC_MENU_MOUSE_BUTTON: {
++                uint32_t mask = host_menu_mouse_mask(a);
++                if (b != 0) {
++                    sHostMenuMouseReleasePending &= ~mask;
++                    sHostMenuMouseButtons |= mask;
++                } else if (mask != 0 && (sHostMenuMouseButtons & mask) != 0) {
++                    sHostMenuMouseReleasePending |= mask;
++                }
++                break;
++            }
++            case MC_MENU_SCROLL:
++                mouse_on_scroll((float) a / 1000.0f, (float) b / 1000.0f);
++                break;
++            case MC_MENU_TEXT: {
++                char text[5];
++                char *utf8 = host_menu_utf8(a, text);
++                if (utf8 != NULL) keyboard_on_text_input(utf8);
++                break;
++            }
++            default:
++                break;
++        }
++        tail++;
++        InterlockedExchange(tailPtr, (LONG) tail);
++    }
++
++}
++
++bool mariocraft_read_host_menu_mouse(int32_t *x, int32_t *y, uint32_t *buttons) {
++    if (!host_menu_input_active() || sFrameInput == NULL || x == NULL || y == NULL || buttons == NULL) return false;
++    volatile LONG *seqPtr = (volatile LONG *) (sFrameInput + 8);
++    uint32_t seq1 = (uint32_t) InterlockedCompareExchange(seqPtr, 0, 0);
++    if (seq1 & 1) return false;
++    MemoryBarrier();
++    uint32_t nx, ny;
++    memcpy(&nx, sFrameInput + 12, 4);
++    memcpy(&ny, sFrameInput + 16, 4);
++    MemoryBarrier();
++    if ((uint32_t) InterlockedCompareExchange(seqPtr, 0, 0) != seq1) return false;
++    u32 width = 0, height = 0;
++    gfx_get_dimensions(&width, &height);
++    if (width == 0 || height == 0) return false;
++    *x = (int32_t) ((uint64_t) nx * width / 65535u) - (int32_t) gfx_current_dimensions.x_adjust_4by3;
++    *y = (int32_t) ((uint64_t) ny * height / 65535u);
++    *buttons = sHostMenuMouseButtons;
++    return true;
++}
++
++bool mariocraft_dialog_confirm_down(void) {
++    extern s32 gDialogID;
++    return host_view_focused() && (sMc.pad4C & MC_VIEW_CONFIRM_DOWN) != 0
++        && gDialogID != DIALOG_NONE;
++}
++
++static bool mouse_button_down(uint32_t windowButton, uint32_t hostButton) {
++    if (host_view_enabled()) return host_view_focused() && (sMc.pad4C & hostButton) != 0;
++    return (mouse_window_buttons & windowButton) != 0;
++}
 +
 +static bool game_has_keyboard(void) {
 +    extern struct GfxWindowManagerAPI *gWindowApi;
 +    extern bool gDjuiChatBoxFocus;
 +    extern bool gDjuiConsoleFocus;
 +    extern bool gDjuiPanelPauseCreated;
-+    return gWindowApi != NULL && gWindowApi->has_focus() && !gDjuiChatBoxFocus && !gDjuiConsoleFocus
++    return (host_view_focused() || (gWindowApi != NULL && gWindowApi->has_focus()))
++        && !gDjuiChatBoxFocus && !gDjuiConsoleFocus
 +        && !gDjuiPanelPauseCreated && !gDjuiInMainMenu;
 +}
 +
@@ -1077,12 +1745,20 @@ index 000000000..f16a27d9c
 +        sKeys[i].heldFrames = 0;
 +        sKeys[i].releasedOnly = sKeys[i].down;
 +    }
-+    sLeftDown = (mouse_window_buttons & MOUSE_BUTTON_1) != 0;
-+    sRightDown = (mouse_window_buttons & MOUSE_BUTTON_3) != 0;
++    sLeftDown = mouse_button_down(MOUSE_BUTTON_1, MC_VIEW_LEFT_DOWN);
++    sRightDown = mouse_button_down(MOUSE_BUTTON_3, MC_VIEW_RIGHT_DOWN);
 +    sMouseReleasedOnly = sLeftDown || sRightDown;
 +}
 +
 +static void forward_keys_and_mouse(bool screenOpen) {
++    // When Minecraft owns the visible window, it already receives native input. Replaying the
++    // same keystrokes from SM64 would double-toggle inventory, chat, screens and mouse clicks.
++    if (host_view_focused()) {
++        if (!sHostViewInputSuppressed) release_everything();
++        sHostViewInputSuppressed = true;
++        return;
++    }
++    sHostViewInputSuppressed = false;
 +    bool focus = game_has_keyboard();
 +    for (size_t i = 0; i < NUM_KEYS; i++) {
 +        struct McKey *k = &sKeys[i];
@@ -1106,8 +1782,8 @@ index 000000000..f16a27d9c
 +    }
 +
 +    // Mouse buttons: left mines / attacks (hold), right places / uses.
-+    bool left = focus && (mouse_window_buttons & MOUSE_BUTTON_1) != 0;
-+    bool right = focus && (mouse_window_buttons & MOUSE_BUTTON_3) != 0;
++    bool left = focus && mouse_button_down(MOUSE_BUTTON_1, MC_VIEW_LEFT_DOWN);
++    bool right = focus && mouse_button_down(MOUSE_BUTTON_3, MC_VIEW_RIGHT_DOWN);
 +    if (sMouseReleasedOnly) {
 +        // Buttons held across a release-all: wait until they're both up.
 +        sMouseReleasedOnly = left || right;
@@ -1279,6 +1955,9 @@ index 000000000..f16a27d9c
 +    s->viewportW = vw;
 +    s->viewportH = (uint32_t) ((uint64_t) vw * winH / winW);
 +    s->gameHour = 12.0f;
++    s->saveSlot = !gDjuiInMainMenu && gCurrLevelNum > 1 && gCurrSaveFileNum >= 1 && gCurrSaveFileNum <= 4 ? gCurrSaveFileNum : 0;
++    s->saveSchema = 1;
++    for (int i = 0; i < 4; i++) s->saveGeneration[i] = sSaveGeneration[i];
 +    MemoryBarrier();
 +    s->seq = sSkySeq * 2;  // even: done
 +}
@@ -1295,6 +1974,7 @@ index 000000000..f16a27d9c
 +    sTeleportSeq++;
 +    sSteveActive = false;
 +    sHaveLastPuppetPos = false;
++    sReleaseVelocityPending = false;
 +}
 +
 +// ---- Mario as Steve's invisible stand-in (called from mario.c every frame) -----------------
@@ -1482,6 +2162,7 @@ index 000000000..f16a27d9c
 +            return false;
 +    }
 +}
++static bool is_course_exit(u32 action);
 +
 +// SM64 cutscenes that show something happening out in the level (rather than to Mario): the
 +// Chain Chomp breaking free, a star or the red-coin star appearing, a cap switch, a Bob-omb
@@ -1569,7 +2250,7 @@ index 000000000..f16a27d9c
 +    }
 +    extern s32 gDialogID;
 +    bool black = inLevel && !sPaintingWarp && (going || sFadeAwaitSteve) && gDialogID == DIALOG_NONE
-+              && sCurrPlayMode != PLAY_MODE_PAUSED;
++              && sCurrPlayMode != PLAY_MODE_PAUSED && !is_course_exit(m->action);
 +    if (black) {
 +        sFade = fminf(1.0f, sFade + 0.2f);   // about a sixth of a second to black
 +    } else {
@@ -1746,6 +2427,26 @@ index 000000000..f16a27d9c
 +// Shift (let go of a pole or of Hoot).
 +static bool is_slide_action(u32 action);  // (below, with slides)
 +
++static bool sm64_owns_motion(u32 action) {
++    return (action & ACT_GROUP_MASK) == ACT_GROUP_CUTSCENE || action == ACT_DEATH_EXIT_LAND;
++}
++
++static bool is_course_exit(u32 action) {
++    switch (action) {
++        case ACT_EXIT_AIRBORNE: case ACT_FALLING_EXIT_AIRBORNE:
++        case ACT_SPECIAL_EXIT_AIRBORNE: case ACT_EXIT_LAND_SAVE_DIALOG:
++        case ACT_DEATH_EXIT: case ACT_UNUSED_DEATH_EXIT: case ACT_DEATH_EXIT_LAND:
++        case ACT_FALLING_DEATH_EXIT: case ACT_SPECIAL_DEATH_EXIT:
++            return true;
++        default:
++            return false;
++    }
++}
++
++bool mariocraft_blocks_painting_warp(void) {
++    return gMcShm != NULL && (sSteveActive || sRehoming) && (sPaintingExitGuard || sRehoming);
++}
++
 +static bool is_carried_action(u32 action) {
 +    if (action & (ACT_FLAG_ON_POLE | ACT_FLAG_RIDING_SHELL)) {
 +        return true;
@@ -1764,6 +2465,14 @@ index 000000000..f16a27d9c
 +}
 +static bool sCarried = false;   // SM64 is carrying Steve
 +static int sCarries = 0;        // for the status line
++static bool sPoleSpaceWas = false;
++static struct Object *sReleasedPole = NULL;
++static uint32_t sPoleReleaseTick = 0;
++
++bool mariocraft_blocks_pole_grab(struct MarioState *m, struct Object *o) {
++    return gMcShm != NULL && m != NULL && m->playerIndex == 0 && o == sReleasedPole
++        && (sRehoming || (uint32_t) (gGlobalTimer - sPoleReleaseTick) < 30);
++}
 +
 +#define IN_VELOCITY 20  // MarioCraft: Minecraft sets the player's velocity (a, b, c: blocks/tick x 10000)
 +#define IN_HEAL     21  // MarioCraft: Minecraft heals the player (a: health x 100)
@@ -1819,13 +2528,18 @@ index 000000000..f16a27d9c
 +}
 +
 +// Let go in mid-air (off a pole, off Hoot, out of a cannon shot): Steve keeps Mario's speed.
-+static void hand_over_velocity(struct MarioState *m) {
++static void queue_release_velocity(struct MarioState *m) {
 +    const float perTick = 1.5f / (float) UNITS_PER_BLOCK;  // SM64 units/frame -> blocks/tick
 +    float v[3] = { m->vel[0] * perTick, m->vel[1] * perTick, m->vel[2] * perTick };
++    if (fabsf(v[0]) + fabsf(v[2]) < 0.001f && fabsf(m->forwardVel) > 0.01f) {
++        v[0] = sins(m->faceAngle[1]) * m->forwardVel * perTick;
++        v[2] = coss(m->faceAngle[1]) * m->forwardVel * perTick;
++    }
 +    for (int i = 0; i < 3; i++) {
 +        v[i] = fmaxf(-3.0f, fminf(3.0f, v[i]));
++        sReleaseVelocity[i] = (int32_t) (v[i] * 10000.0f);
 +    }
-+    push_input_xyz(IN_VELOCITY, 0, (int32_t) (v[0] * 10000.0f), (int32_t) (v[1] * 10000.0f), (int32_t) (v[2] * 10000.0f));
++    sReleaseVelocityPending = true;
 +}
 +
 +
@@ -1937,6 +2651,7 @@ index 000000000..f16a27d9c
 +#define MC_FLYING    (1u << 7)  // creative flight or an elytra
 +#define MC_IN_FLUID  (1u << 8)  // water, lava, a ladder or vines
 +#define CHAIN_FRAMES 6          // a landing this recent still chains into the next jump
++#define JUMP_PRESS_BUFFER 12    // Minecraft and SM64 tick at different rates (400 ms at 30 fps)
 +
 +static bool sMoveWasGround = true;
 +static bool sMoveSpaceWas = false;
@@ -1947,6 +2662,32 @@ index 000000000..f16a27d9c
 +static float sMoveSpeed = 0;   // recent sideways speed (blocks/tick), its peak over a few frames
 +static int sMoveCount = 0;     // for the status line
 +static int sMoveSincePress = 99;
++static uint32_t sMoveJumpPressSeq = 0;
++
++enum SteveMarioJump {
++    STEVE_JUMP_NONE,
++    STEVE_JUMP_DOUBLE,
++    STEVE_JUMP_TRIPLE,
++    STEVE_JUMP_LONG,
++    STEVE_JUMP_BACKFLIP,
++};
++
++static bool steve_jump_press_edge(bool spaceDown, uint32_t pressSeq, bool useSharedSeq,
++                                  bool *spaceWasDown, uint32_t *lastPressSeq) {
++    bool keyboardEdge = spaceDown && !*spaceWasDown;
++    *spaceWasDown = spaceDown;
++    bool sharedEdge = useSharedSeq && pressSeq != *lastPressSeq;
++    *lastPressSeq = useSharedSeq ? pressSeq : 0;
++    return keyboardEdge || sharedEdge;
++}
++
++static enum SteveMarioJump steve_choose_jump(bool sneaking, float speed, bool freshPress, int chain) {
++    if (sneaking && speed > 0.15f) return STEVE_JUMP_LONG;
++    if (sneaking && speed < 0.06f) return STEVE_JUMP_BACKFLIP;
++    if (freshPress && chain == 2 && speed > 0.18f) return STEVE_JUMP_TRIPLE;
++    if (freshPress && chain == 1) return STEVE_JUMP_DOUBLE;
++    return STEVE_JUMP_NONE;
++}
 +
 +static void mario_move(float vx, float vy, float vz, bool keepSideways, float extraBlocks) {
 +    uint16_t code = (uint16_t) ((keepSideways ? 1 : 0) | ((int) (extraBlocks * 10.0f + 0.5f) << 4));
@@ -1956,11 +2697,12 @@ index 000000000..f16a27d9c
 +
 +static void steve_mario_moves(struct MarioState *m, const float *newPos, bool onGround, bool sneaking) {
 +    bool space = key_held(VK_SPACE);
-+    bool spaceEdge = space && !sMoveSpaceWas;
-+    sMoveSpaceWas = space;
-+    // (Holding Space hops again on landing, Minecraft's way: only a fresh press chains Mario's.)
++    bool spaceEdge = steve_jump_press_edge(space, sMc.jumpPressSeq, host_view_enabled(),
++                                           &sMoveSpaceWas, &sMoveJumpPressSeq);
++    // Minecraft View's press sequence preserves a quick tap until SM64's slower frame sees it.
++    // Classic mode still reads the focused SM64 window directly.
 +    sMoveSincePress = spaceEdge ? 0 : sMoveSincePress + 1;
-+    bool freshPress = sMoveSincePress <= CHAIN_FRAMES + 2;
++    bool freshPress = sMoveSincePress <= JUMP_PRESS_BUFFER;
 +    float dx = newPos[0] - m->pos[0], dz = newPos[2] - m->pos[2];
 +    float speed = sqrtf(dx * dx + dz * dz) * 1.5f / UNITS_PER_BLOCK;  // units/frame -> blocks/tick
 +    sMoveSpeed = fmaxf(speed, sMoveSpeed * 0.85f);
@@ -1980,23 +2722,26 @@ index 000000000..f16a27d9c
 +        sMoveChain = 0;
 +        return;  // (swimming, climbing, flying: Minecraft's own; a teleport isn't speed)
 +    }
-+    float yaw = sYaw * 3.14159265f / 180.0f;
++    // The View window receives mouse look in Minecraft, so its camera yaw is the jump direction.
++    float yaw = (host_view_focused() ? sMc.yaw : sYaw) * 3.14159265f / 180.0f;
 +    float fwdX = -sinf(yaw), fwdZ = cosf(yaw);  // where Steve faces, in Minecraft's x and z
 +
-+    if (takeoff && space) {
-+        if (sneaking && sMoveSpeed > 0.15f) {
-+            // Long jump: from a run, crouch and jump. Far and low, like Mario's.
++    if (takeoff && (space || freshPress)) {
++        enum SteveMarioJump move = steve_choose_jump(sneaking, sMoveSpeed, freshPress, sMoveChain);
++        // In Minecraft a landing and the next jump can happen in one tick. The chain counter is
++        // authoritative; requiring SM64 to sample an intermediate grounded frame dropped the
++        // double/triple jump on short landings.
++        if (move == STEVE_JUMP_LONG) {
 +            mario_move(fwdX * 0.75f, 0.38f, fwdZ * 0.75f, false, 0.0f);
 +            sMoveChain = 0;
-+        } else if (sneaking && sMoveSpeed < 0.06f) {
-+            // Backflip: crouch and jump standing still. High, a little backwards.
++        } else if (move == STEVE_JUMP_BACKFLIP) {
 +            mario_move(-fwdX * 0.12f, 0.78f, -fwdZ * 0.12f, false, 2.4f);
 +            sMoveChain = 0;
-+        } else if (freshPress && sMoveLanded <= CHAIN_FRAMES && sMoveChain == 2 && sMoveSpeed > 0.18f) {
-+            mario_move(0, 0.72f, 0, true, 2.0f);  // triple jump
++        } else if (move == STEVE_JUMP_TRIPLE) {
++            mario_move(0, 0.72f, 0, true, 2.0f);
 +            sMoveChain = 0;
-+        } else if (freshPress && sMoveLanded <= CHAIN_FRAMES && sMoveChain == 1) {
-+            mario_move(0, 0.56f, 0, true, 0.9f);  // double jump
++        } else if (move == STEVE_JUMP_DOUBLE) {
++            mario_move(0, 0.56f, 0, true, 0.9f);
 +            sMoveChain = 2;
 +        } else {
 +            sMoveChain = 1;  // Minecraft's own jump: the first of a chain
@@ -2035,6 +2780,13 @@ index 000000000..f16a27d9c
 +// True: Mario was put where Steve is; SM64 then only runs his interactions (coins, enemies,
 +// paintings, death planes), not his own movement, and keeps him hidden.
 +bool mariocraft_steve_drives_mario(struct MarioState *m) {
++    if (gMcShm != NULL && sRehoming && !sSteveActive && m->playerIndex == 0
++        && m->marioObj != NULL && !sm64_owns_motion(m->action)) {
++        // Freeze native motion during a handoff instead of letting the stand-in fall or
++        // regrab a pole while Minecraft is still acknowledging the release position.
++        m->marioObj->header.gfx.node.flags |= GRAPH_RENDER_INVISIBLE;
++        return true;
++    }
 +    if (gMcShm == NULL || !sSteveActive || m->playerIndex != 0 || m->marioObj == NULL) {
 +        return false;
 +    }
@@ -2043,27 +2795,52 @@ index 000000000..f16a27d9c
 +    }
 +    // Cutscenes (grabbing a star, talking, going through a door...) play out as SM64's, but it's
 +    // Steve they happen to: Mario is never seen.
-+    if ((m->action & ACT_GROUP_MASK) == ACT_GROUP_CUTSCENE) {
++    if (sm64_owns_motion(m->action)) {
 +        sTrackDoor = NULL;
-+        m->marioObj->header.gfx.node.flags |= GRAPH_RENDER_INVISIBLE;
-+        return false;
-+    }
-+    if (is_carried_action(m->action)) {
-+        if (!sCarried) {
-+            sCarried = true;
-+            sCarries++;
-+        }
++        sCarried = true;
 +        carried_frame(m);
 +        return false;
 +    }
++    if (is_carried_action(m->action)) {
++        bool space = key_held(VK_SPACE);
++        bool jumpOff = (m->action & ACT_FLAG_ON_POLE) && sCarried && space && !sPoleSpaceWas;
++        sPoleSpaceWas = space;
++        if ((m->action & ACT_FLAG_ON_POLE) && (jumpOff || key_held(VK_SHIFT))) {
++            // Grab/top animations otherwise swallow a fresh jump until they finish.
++            // Let Steve leave on the first press, then keep the same pole from recatching him.
++            sReleasedPole = m->usedObj;
++            sPoleReleaseTick = gGlobalTimer;
++            m->faceAngle[1] = steve_face_yaw();
++            set_mario_action(m, jumpOff ? ACT_WALL_KICK_AIR : ACT_FREEFALL, 0);
++            m->forwardVel = jumpOff ? 24.0f : 8.0f;
++            if (!jumpOff) m->vel[1] = 0;
++            // Continue into the release handshake below.
++        } else {
++            if (!sCarried) {
++                sCarried = true;
++                sCarries++;
++            }
++            carried_frame(m);
++            return false;
++        }
++    }
 +    if (sCarried) {
++        if ((m->prevAction & ACT_FLAG_ON_POLE) && m->usedObj != NULL) {
++            sReleasedPole = m->usedObj;
++            sPoleReleaseTick = gGlobalTimer;
++        }
 +        sCarried = false;
 +        sSlideWait = 10;                // (out of a slide: not straight back into it)
 +        set_grab_crouch(false);         // thrown: he stands up again
 +        sSkyExtraFlags &= ~SKY_PUPPET;  // Minecraft lets go of him now, before the speed arrives
-+        if (m->action & ACT_FLAG_AIR) {
-+            hand_over_velocity(m);
-+        }
++        // The previous Minecraft sample still belongs to the pole/cutscene. Place Steve at
++        // the release point and wait for its acknowledgement before sending the impulse.
++        float yaw = sYaw, pitch = sPitch;
++        teleport_steve_to_mario(m);
++        sYaw = yaw;
++        sPitch = pitch;
++        if (m->action & ACT_FLAG_AIR) queue_release_velocity(m);
++        return false;
 +    }
 +    // Something in SM64 moved Mario itself (a warp, a cannon...): Steve goes there too.
 +    if (sHaveLastPuppetPos) {
@@ -2149,6 +2926,13 @@ index 000000000..f16a27d9c
 +    // him, anywhere from his feet to his head, counts as his floor.
 +    f32 paintingHeight = 0;
 +    struct Surface *painting = painting_in_front(m, &paintingHeight);
++    if (sPaintingExitGuard) {
++        // Require a short interval clear of the painting before another deliberate entry.
++        // Death and star exits must finish even when the spawn point touches its trigger.
++        if (painting != NULL || is_painting_warp(floor)) sPaintingClearFrames = 0;
++        else if (++sPaintingClearFrames >= 15) sPaintingExitGuard = false;
++        painting = NULL;
++    }
 +    if (painting != NULL) {
 +        floor = painting;
 +        m->floorHeight = paintingHeight;
@@ -2665,8 +3449,12 @@ index 000000000..f16a27d9c
 +    // Where Steve looks: our own yaw/pitch (no lag), Minecraft's axes. Not quite straight up or
 +    // down: SM64's look-at maths has no answer for a camera pointing exactly along the vertical
 +    // (every number turns into NaN and nothing in the world gets drawn: a black screen).
-+    float pitch = sPitch > 89.5f ? 89.5f : (sPitch < -89.5f ? -89.5f : sPitch);
-+    float yr = sYaw * 3.14159265f / 180.0f, pr = pitch * 3.14159265f / 180.0f;
++    // In Minecraft View, Minecraft owns the pointer and has already applied its mouse delta
++    // to the player. Use that pose directly; SM64's window never receives those mouse events.
++    float yaw = host_view_focused() ? sMc.yaw : sYaw;
++    float lookPitch = host_view_focused() ? sMc.pitch : sPitch;
++    float pitch = lookPitch > 89.5f ? 89.5f : (lookPitch < -89.5f ? -89.5f : lookPitch);
++    float yr = yaw * 3.14159265f / 180.0f, pr = pitch * 3.14159265f / 180.0f;
 +    float dir[3] = { -sinf(yr) * cosf(pr), -sinf(pr), cosf(yr) * cosf(pr) };
 +    float dist = sMc.cameraDistance * (float) UNITS_PER_BLOCK;
 +    if (sMc.cameraMode == 1) {         // behind Steve
@@ -2949,8 +3737,11 @@ index 000000000..f16a27d9c
 +    mc_render_drain();
 +    mc_overlay_poll();
 +    read_mc_state();
++    host_menu_input_update();
 +
 +    if (!inLevel) {
++        sPendingGeometryWorld = 0xFFFFFFFFu;
++        sLastWorldId = sExportedWorldId = 0xFFFFFFFFu;
 +        mc_render_set_world(0xFFFFFFFFu);
 +        mc_render_set_avatar(false, 0, 0, 0);
 +        mc_overlay_set_visible(false);
@@ -2960,13 +3751,24 @@ index 000000000..f16a27d9c
 +        gMarioCraftOwnsMouse = gMarioCraftLockMouse = gMarioCraftWantsPointer = false;
 +        sSteveActive = false;
 +        sRehoming = false;
++        sCarried = false;
++        sReleaseVelocityPending = false;
++        sPaintingExitGuard = false;
++        sPaintingClearFrames = 0;
++        sReleasedPole = NULL;
 +        update_fade(m, false);
-+        write_sky_state(SKY_LOADING, 0);
++        write_sky_state(gDjuiInMainMenu ? SKY_MENU_OPEN : SKY_LOADING, 0);
 +        return;
 +    }
 +
 +    // Each level/area lives in its own patch of the Minecraft world.
-+    uint32_t worldId = (uint32_t) gCurrLevelNum * 16u + (uint32_t) gCurrAreaIndex;
++    uint32_t worldId = mc_world_id(gCurrLevelNum, gCurrAreaIndex, gCurrCourseNum, gCurrActNum);
++    struct GrowingArray *surfaces = surface_get_static_pool();
++    if (!area_geometry_ready(worldId, gStaticSurfacesGeneration,
++                             gCurrentArea != NULL && surfaces != NULL && surfaces->count > 0)) {
++        write_sky_state(SKY_LOADING, worldId);
++        return;
++    }
 +    if (worldId != sLastWorldId) {
 +        sLastWorldId = worldId;
 +        sWorldId = worldId;
@@ -2981,13 +3783,15 @@ index 000000000..f16a27d9c
 +    // Send the area's shape to Minecraft: on entering it, and again whenever a (new) Minecraft
 +    // shows up, since a freshly started Minecraft knows nothing.
 +    uint32_t mcPid = header()->mcPid;
-+    if (worldId != sExportedWorldId || (mcPid != 0 && mcPid != sLastMcPid)) {
-+        if (mcPid != sLastMcPid && worldId == sExportedWorldId) {
++    if (worldId != sExportedWorldId || gStaticSurfacesGeneration != sExportedSurfaceGeneration
++        || (mcPid != 0 && mcPid != sLastMcPid)) {
++        if (worldId == sExportedWorldId) {
 +            sEpoch++;
 +            teleport_steve_to_mario(m);
 +        }
 +        sLastMcPid = mcPid;
 +        sExportedWorldId = worldId;
++        sExportedSurfaceGeneration = gStaticSurfacesGeneration;
 +        mc_collision_export(worldId, sEpoch);
 +    }
 +    mc_collision_pump();
@@ -3040,6 +3844,10 @@ index 000000000..f16a27d9c
 +    if (mcInWorld && !sSteveActive && sMc.teleportAck == sTeleportSeq) {
 +        sSteveActive = true;
 +        sRehoming = false;
++        if (sReleaseVelocityPending) {
++            push_input_xyz(IN_VELOCITY, 0, sReleaseVelocity[0], sReleaseVelocity[1], sReleaseVelocity[2]);
++            sReleaseVelocityPending = false;
++        }
 +    }
 +    if (!mcInWorld) {
 +        sSteveActive = false;
@@ -3049,10 +3857,14 @@ index 000000000..f16a27d9c
 +    // pause menu, and until Minecraft has Steve in place. The rest of the time every key is
 +    // Minecraft's and Mario never reads the controller.
 +    extern s32 gDialogID;
-+    bool cutscene = (m->action & ACT_GROUP_MASK) == ACT_GROUP_CUTSCENE;
++    bool cutscene = sm64_owns_motion(m->action);
++    if (is_course_exit(m->action)) {
++        sPaintingExitGuard = true;
++        sPaintingClearFrames = 0;
++    }
 +    // SM64 showing something happen out in the level (the Chain Chomp breaking free, a star
 +    // appearing, a cannon opening, Bowser arriving): its camera shows it, Steve stands there.
-+    bool worldCut = world_cutscene();
++    bool worldCut = world_cutscene() || is_course_exit(m->action);
 +    bool sm64Busy = !sSteveActive || cutscene || worldCut || gDialogID != DIALOG_NONE || sCurrPlayMode == PLAY_MODE_PAUSED;
 +    bool carried = sCarried && sSteveActive && !sm64Busy;  // see is_carried_action
 +    bool steveControls = mcInWorld && !sm64Busy;
@@ -3075,6 +3887,10 @@ index 000000000..f16a27d9c
 +        carry_pad(m);  // Steve's keys also steer what's carrying him
 +    }
 +    sHadCarried = carried;
++    if (sSteveActive && (cutscene || is_carried_action(m->action))) {
++        sCarried = true;
++        carried_frame(m); // after SM64's physics, not the previous frame's position
++    }
 +    sSkyExtraFlags |= (sCarried && sSteveActive) ? SKY_PUPPET : 0;
 +    sSkyExtraFlags |= worldCut ? SKY_SHOW_BODY : 0;
 +    sSkyExtraFlags |= (sCarried && sSteveActive && is_slide_action(m->action)) ? SKY_SLIDING : 0;
@@ -3119,14 +3935,16 @@ index 000000000..f16a27d9c
 +        mc_render_avatar_frame(sMc.x, sMc.y, sMc.z);  // (Steve's camera isn't placing it now)
 +    }
 +    update_fade(m, true);
++    sSkyExtraFlags |= (cutscene || worldCut || gDialogID != DIALOG_NONE || sStarSelectNow)
++                    ? SKY_HIDE_MINECRAFT_HUD : 0;
 +    // A right click: pick up / put down what's in front of Steve, or talk to someone / read a
 +    // sign. A left click while carrying something throws it.
-+    bool rmb = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0 && game_has_keyboard();
++    bool rmb = mouse_button_down(MOUSE_BUTTON_3, MC_VIEW_RIGHT_DOWN) && game_has_keyboard();
 +    if (rmb && !sRmbDown && steveControls && !screenOpen) {
 +        steve_use(m);
 +    }
 +    sRmbDown = rmb;
-+    bool lmb = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0 && game_has_keyboard();
++    bool lmb = mouse_button_down(MOUSE_BUTTON_1, MC_VIEW_LEFT_DOWN) && game_has_keyboard();
 +    if (lmb && !sLmbDown && steveControls && !screenOpen && m->heldObj != NULL) {
 +        steve_throw(m);
 +    }
@@ -3178,6 +3996,13 @@ index 000000000..f16a27d9c
 +bool gMarioCraftWantsPointer = false;
 +
 +void mariocraft_init(void) {}
++bool mariocraft_frame_viewer_active(void) { return false; }
++bool mariocraft_frame_capture_due(void) { return false; }
++void mariocraft_publish_frame(uint32_t width, uint32_t height, const void *pixels, uint32_t pitch,
++                              bool bgra, bool flipVertical) {
++    (void) width; (void) height; (void) pixels; (void) pitch; (void) bgra; (void) flipVertical;
++}
++bool mariocraft_erase_save(int fileIndex) { (void) fileIndex; return true; }
 +void mariocraft_update(void) {}
 +bool mariocraft_steve_drives_mario(struct MarioState *m) { (void) m; return false; }
 +void mariocraft_after_interactions(struct MarioState *m) { (void) m; }
@@ -3185,9 +4010,12 @@ index 000000000..f16a27d9c
 +bool mariocraft_hide_menu_mario(struct MarioState *m) { (void) m; return false; }
 +void mariocraft_painting_warp(void) {}
 +void mariocraft_star_select_shown(void) {}
++bool mariocraft_blocks_painting_warp(void) { return false; }
++bool mariocraft_blocks_pole_grab(struct MarioState *m, struct Object *o) { return false; }
 +void mariocraft_after_objects(void) {}
 +bool mariocraft_mute_sound(s32 soundBits, f32 *pos) { (void) soundBits; (void) pos; return false; }
 +bool mariocraft_take_text(const char *text) { (void) text; return false; }
++bool mariocraft_dialog_confirm_down(void) { return false; }
 +bool mariocraft_camera_for_frame(f32 pos[3], f32 focus[3]) { (void) pos; (void) focus; return false; }
 +void mariocraft_mouse_moved(s32 dx, s32 dy) { (void) dx; (void) dy; }
 +const char *mariocraft_status_text(void) { return NULL; }
@@ -3203,10 +4031,9 @@ index 000000000..f16a27d9c
 +#endif
 diff --git a/src/pc/mariocraft/mariocraft.h b/src/pc/mariocraft/mariocraft.h
 new file mode 100644
-index 000000000..296639cde
 --- /dev/null
 +++ b/src/pc/mariocraft/mariocraft.h
-@@ -0,0 +1,28 @@
+@@ -0,0 +1,43 @@
 +#ifndef MARIOCRAFT_H
 +#define MARIOCRAFT_H
 +
@@ -3215,9 +4042,20 @@ index 000000000..296639cde
 +// Mario is the boss. The Minecraft player follows him around.
 +
 +#include <stdbool.h>
++#include <stddef.h>
++#include <stdint.h>
 +
 +void mariocraft_init(void);
 +void mariocraft_update(void);
++bool mariocraft_erase_save(int fileIndex);
++
++// Optional, separate video channel for Minecraft-hosted play. The legacy game and shared-memory
++// protocol remain usable when no viewer is connected.
++bool mariocraft_frame_viewer_active(void);
++// Capture at the 30 Hz simulation cadence: Minecraft cannot show extra interpolated SM64 frames.
++bool mariocraft_frame_capture_due(void);
++void mariocraft_publish_frame(uint32_t width, uint32_t height, const void *pixels, uint32_t pitch,
++                              bool bgra, bool flipVertical);
 +
 +// While active, SM64's camera is Steve's: set by mariocraft.c, used by rendering_graph_node.c.
 +struct MarioCraftCamera {
@@ -3233,14 +4071,17 @@ index 000000000..296639cde
 +
 +// The star select is on screen this frame (star_select.c): MarioCraft's dirt screen stays off it.
 +void mariocraft_star_select_shown(void);
++bool mariocraft_blocks_painting_warp(void);
++struct MarioState;
++struct Object;
++bool mariocraft_blocks_pole_grab(struct MarioState *m, struct Object *o);
 +
 +#endif
 diff --git a/src/pc/mariocraft/mariocraft_internal.h b/src/pc/mariocraft/mariocraft_internal.h
 new file mode 100644
-index 000000000..ae1dde227
 --- /dev/null
 +++ b/src/pc/mariocraft/mariocraft_internal.h
-@@ -0,0 +1,155 @@
+@@ -0,0 +1,166 @@
 +#ifndef MARIOCRAFT_INTERNAL_H
 +#define MARIOCRAFT_INTERNAL_H
 +
@@ -3291,6 +4132,16 @@ index 000000000..ae1dde227
 +#define LEVEL_SPACING   256.0
 +#define LEVEL_ORIGIN_X  10000.0
 +
++// Main-course acts are separate SM64 instances. Keep legacy coordinates for act 1,
++// castles and secret courses; put acts 2..6 in distinct regions of the mirror world.
++static inline uint32_t mc_world_id(int level, int area, int course, int act) {
++    uint32_t legacy = (uint32_t) level * 16u + (uint32_t) area;
++    if (course >= 1 && course <= 15 && act >= 2 && act <= 6) {
++        return legacy + (uint32_t) (act - 1) * 1024u;
++    }
++    return legacy;
++}
++
 +extern uint8_t *gMcShm;  // the shared mapping (NULL if it couldn't be created)
 +
 +static inline double mc_origin_x(uint32_t worldId) {
@@ -3332,6 +4183,7 @@ index 000000000..ae1dde227
 +
 +// mc_dig.c: holes dug into Mario's level (Minecraft block coordinates, absolute)
 +bool mc_dig_any(void);
++void mc_dig_clear(void);
 +bool mc_dig_is_dug(int x, int y, int z);
 +void mc_dig_read(const uint8_t *payload, uint32_t bytes);  // a REN_DUG message
 +void mc_dig_update(uint32_t worldId);                     // apply changes (collision, visible holes)
@@ -4140,7 +4992,6 @@ index 000000000..b6d04ec0e
 +}
 diff --git a/src/pc/mariocraft/mc_collision.c b/src/pc/mariocraft/mc_collision.c
 new file mode 100644
-index 000000000..16131aada
 --- /dev/null
 +++ b/src/pc/mariocraft/mc_collision.c
 @@ -0,0 +1,866 @@
@@ -4448,7 +5299,7 @@ index 000000000..16131aada
 +bool mc_surface_walkable(const struct Surface *s, uint16_t terrainType) { return walkable_for_mario(s, terrainType); }
 +
 +// ---- lining Minecraft's block grid up with the floor (see mariocraft_internal.h) -----------
-+#define ORIGIN_Y_SLOTS 4096
++#define ORIGIN_Y_SLOTS 8192
 +static int8_t sOriginYUnits[ORIGIN_Y_SLOTS];
 +static bool sOriginYKnown[ORIGIN_Y_SLOTS];
 +
@@ -5012,10 +5863,9 @@ index 000000000..16131aada
 +}
 diff --git a/src/pc/mariocraft/mc_dig.c b/src/pc/mariocraft/mc_dig.c
 new file mode 100644
-index 000000000..00b6311b2
 --- /dev/null
 +++ b/src/pc/mariocraft/mc_dig.c
-@@ -0,0 +1,710 @@
+@@ -0,0 +1,717 @@
 +// MarioCraft: holes dug into Mario's level.
 +//
 +// Steve mines SM64's ground like any Minecraft block: SkyCraft's Minecraft mod (SkyDig) works
@@ -5153,6 +6003,13 @@ index 000000000..00b6311b2
 +static int sNumPending = 0;
 +static bool sAllPending = false;
 +static bool sVisualsDirty = false;
++
++void mc_dig_clear(void) {
++    if (sSet != NULL) memset(sSet, 0, sSetCap * sizeof(*sSet));
++    sSetCount = 0;
++    sNumSections = sNumPending = 0;
++    sAllPending = sVisualsDirty = true;
++}
 +
 +void mc_dig_read(const uint8_t *p, uint32_t bytes) {
 +    if (bytes < 24) {
@@ -5728,10 +6585,9 @@ index 000000000..00b6311b2
 +}
 diff --git a/src/pc/mariocraft/mc_lobby.c b/src/pc/mariocraft/mc_lobby.c
 new file mode 100644
-index 000000000..e9858a549
 --- /dev/null
 +++ b/src/pc/mariocraft/mc_lobby.c
-@@ -0,0 +1,244 @@
+@@ -0,0 +1,250 @@
 +// MarioCraft multiplayer: everyone's Minecraft in one world.
 +//
 +// Each player has their own hidden Minecraft. When they play SM64 together, the host's Minecraft
@@ -5793,6 +6649,7 @@ index 000000000..e9858a549
 +static char sMcLink[LB_TEXT_BYTES];
 +
 +static char sHostLink[LB_TEXT_BYTES];   // client: where the host's Minecraft world is
++static uint32_t sHostHeard = 0;
 +static uint32_t sTimer = 0;
 +static enum NetworkType sLastNetworkType = NT_NONE;
 +static uint32_t sAnnouncedWorld = MCW_NONE;
@@ -5868,10 +6725,12 @@ index 000000000..e9858a549
 +    if (face != NULL && (flags & PF_FACE)) {
 +        mariocraft_remote_face(np->localIndex, face);
 +    }
-+    if (gNetworkType == NT_CLIENT && globalIndex == 0 && link != NULL && link[0] != '\0'
-+        && strcmp(link, sHostLink) != 0) {
-+        snprintf(sHostLink, sizeof(sHostLink), "%s", link);
-+        printf("[MarioCraft] the host's Minecraft world is at %s\n", sHostLink);
++    if (gNetworkType == NT_CLIENT && globalIndex == 0) {
++        sHostHeard = sTimer;
++        if (link != NULL && strcmp(link, sHostLink) != 0) {
++            snprintf(sHostLink, sizeof(sHostLink), "%s", link);
++            printf("[MarioCraft] the host's Minecraft world is at %s\n", sHostLink);
++        }
 +    }
 +}
 +
@@ -5924,10 +6783,13 @@ index 000000000..e9858a549
 +            }
 +            break;
 +        case NT_CLIENT:
-+            if (sHostLink[0] != '\0') {
++            if (sHostLink[0] != '\0' && sTimer - sHostHeard > 300) {
++                sHostLink[0] = '\0'; // don't reconnect Minecraft to a previous/stalled host
++                write_want(WANT_OWN_WORLD, NULL);
++            } else if (sHostLink[0] != '\0') {
 +                write_want(WANT_JOIN, sHostLink);
 +            } else {
-+                write_want(WANT_NOTHING, NULL);  // until the host says where its world is
++                write_want(WANT_OWN_WORLD, NULL); // wait at home; don't keep a previous host's world
 +            }
 +            break;
 +        default:
@@ -7616,10 +8478,9 @@ index 000000000..c795f5a4c
 +}
 diff --git a/src/pc/mariocraft/mc_render.c b/src/pc/mariocraft/mc_render.c
 new file mode 100644
-index 000000000..8631741dd
 --- /dev/null
 +++ b/src/pc/mariocraft/mc_render.c
-@@ -0,0 +1,1335 @@
+@@ -0,0 +1,1336 @@
 +// MarioCraft: draws Minecraft's blocks inside SM64, and makes them solid for Mario.
 +//
 +// Minecraft builds the block meshes itself (models, tint, ambient occlusion, light) and sends
@@ -8225,6 +9086,7 @@ index 000000000..8631741dd
 +}
 +
 +static void clear_all(void) {
++    mc_dig_clear();
 +    uint32_t gen = gStaticSurfacesGeneration;
 +    for (int i = 0; i < sNumSections; i++) {
 +        section_free_mesh(&sSections[i]);

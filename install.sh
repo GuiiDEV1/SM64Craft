@@ -47,12 +47,14 @@ PRISM_PAGE="https://prismlauncher.org/download/windows/"
 
 java_home=""
 local_app="$(cygpath -u "${LOCALAPPDATA:-C:\\}")"
+roaming_app="$(cygpath -u "${APPDATA:-C:\\Users}")"
 on_path=""
 if command -v java >/dev/null 2>&1; then
     on_path="$(dirname "$(dirname "$(command -v java)")")"
 fi
 for candidate in "${JAVA_HOME:-}" "$on_path" "$local_app/Programs/Eclipse Adoptium"/jdk-25* "/c/Program Files/Eclipse Adoptium"/jdk-25* \
-                 "/c/Program Files/Java"/jdk-25* "/c/Program Files/Microsoft"/jdk-25* "/c/Program Files/Zulu"/zulu-25*; do
+                 "/c/Program Files/Java"/jdk-25* "/c/Program Files/Microsoft"/jdk-25* "/c/Program Files/Zulu"/zulu-25* \
+                 "$roaming_app"/PrismLauncher/java/java-runtime-*; do
     [ -n "$candidate" ] || continue
     unixpath="$(cygpath -u "$candidate" 2>/dev/null || echo "$candidate")"
     if [ -x "$unixpath/bin/java.exe" ] && [ -x "$unixpath/bin/javac.exe" ] && "$unixpath/bin/java.exe" -version 2>&1 | grep -q 'version "25'; then
@@ -109,66 +111,13 @@ if [ $missing = 1 ]; then
 fi
 echo "OK"
 
-echo "== 3/6  Your Super Mario 64 ROM"
-rom="$here/baserom.us.z64"
-# Any name will do: every .z64, .n64 and .v64 file in this folder is looked at, byte-swapped dumps
-# (.v64, .n64) put the right way round, and the one that is Super Mario 64 (USA) becomes
-# baserom.us.z64. The player's own file is left as it is.
-python3 - "$here" "$ROM_SHA1" <<'PYEOF' || fail "No Super Mario 64 (USA) ROM found (see above). Put your own ROM file (.z64, .n64 or .v64; any name) in this folder, next to install.bat, then run install.bat again. MarioCraft doesn't include it."
-import hashlib, os, sys
-here, want = sys.argv[1], sys.argv[2]
-other = {
-    "8a20a5c83d6ceb0f0506cfc9fa20d8f438cafe51": "the Japanese version",
-    "4ac5721683d0e0b6bbb561b58a71740845dceea9": "the European version",
-    "3f319ae697533a255a1003d09202379d78d5a2e0": "the Shindou (Japanese rumble) version",
-}
-names = sorted(f for f in os.listdir(here) if f.lower().endswith((".z64", ".n64", ".v64")))
-names.sort(key=lambda f: f != "baserom.us.z64")  # (one already set up first)
-if not names:
-    print("  There's no .z64, .n64 or .v64 file in this folder.")
-for name in names:
-    data = open(os.path.join(here, name), "rb").read()
-    head = data[:4]
-    if head == b"\x80\x37\x12\x40":
-        z64 = data
-    elif head == b"\x37\x80\x40\x12":  # .v64: every two bytes swapped
-        z = bytearray(len(data))
-        z[0::2], z[1::2] = data[1::2], data[0::2]
-        z64 = bytes(z)
-    elif head == b"\x40\x12\x37\x80":  # .n64: every four bytes reversed
-        z = bytearray(len(data))
-        z[0::4], z[1::4], z[2::4], z[3::4] = data[3::4], data[2::4], data[1::4], data[0::4]
-        z64 = bytes(z)
-    else:
-        print("  %s: not a Nintendo 64 ROM" % name)
-        continue
-    sha = hashlib.sha1(z64).hexdigest()
-    if sha == want:
-        if name != "baserom.us.z64":
-            with open(os.path.join(here, "baserom.us.z64"), "wb") as f:
-                f.write(z64)
-        print("  Using %s" % name)
-        sys.exit(0)
-    print("  %s: %s, not Super Mario 64 (USA)" % (name, other.get(sha, "a different game or a modified ROM")))
-sys.exit(1)
-PYEOF
-[ "$(sha1sum "$rom" | cut -d' ' -f1)" = "$ROM_SHA1" ] || fail "baserom.us.z64 couldn't be set up"
-# (sm64coopdx also looks for it here when it starts)
-if [ -n "${APPDATA:-}" ]; then
-    appdata="$(cygpath -u "$APPDATA")"
-    if [ ! -f "$appdata/sm64coopdx/baserom.us.z64" ]; then
-        mkdir -p "$appdata/sm64coopdx" && cp "$rom" "$appdata/sm64coopdx/baserom.us.z64"
-    fi
-fi
-echo "OK"
-
 # Gets an upstream project at the pinned version with MarioCraft's patch on it.
 get_source() {
-    local dir="$1" repo="$2" commit="$3" patch="$here/patches/$4"
+    local dir="$1" repo="$2" commit="$3" tag="$4" patch="$here/patches/$5"
     if [ ! -d "$here/$dir/.git" ]; then
-        rm -rf "$here/$dir"
+        [ ! -e "$here/$dir" ] || fail "$here/$dir already exists and isn't a MarioCraft-managed Git checkout. Rename it to keep its files, then retry."
         echo "Downloading $dir..."
-        git clone -q "$repo" "$here/$dir" || fail "couldn't download $dir from $repo (are you online?)"
+        git clone -q --depth=1 --branch "$tag" "$repo" "$here/$dir" || fail "couldn't download $dir from $repo (are you online?)"
     fi
     cd "$here/$dir" || exit 1
     if git apply --reverse --check "$patch" 2>/dev/null; then
@@ -176,15 +125,52 @@ get_source() {
         return
     fi
     # A fresh copy, or an older MarioCraft: back to the upstream version, then this patch.
-    git fetch -q origin 2>/dev/null
+    git fetch -q --depth=1 origin "refs/tags/$tag" 2>/dev/null
     git reset -q --hard "$commit" || fail "couldn't get $dir at version $commit"
     git clean -q -fd -e build -e baserom.us.z64
     git apply --whitespace=nowarn "$patch" || fail "MarioCraft's patch didn't apply to $dir"
     echo "OK: $dir patched"
 }
 
-echo "== 4/6  Super Mario 64 (sm64coopdx + MarioCraft)"
-get_source sm64coopdx "$SM64_REPO" "$SM64_COMMIT" sm64coopdx.patch
+echo "== 3/6  Build the Minecraft mod (no ROM needed yet)"
+get_source SkyCraft "$SKY_REPO" "$SKY_COMMIT" v0.1.2 skycraft.patch
+echo "Building (Gradle downloads Minecraft 26.3's build files the first time; the log is in minecraft-mod-build.log)..."
+# MSYS2 exports TEMP/TMP as /tmp, which breaks Java's Windows loopback socket setup.
+(cd "$here/SkyCraft/fabric" && env -u TEMP -u TMP cmd //c "$(cygpath -w "$here/SkyCraft/fabric/gradlew.bat")" build > "$here/minecraft-mod-build.log" 2>&1) || {
+    tail -n 25 "$here/minecraft-mod-build.log"
+    fail "the Minecraft mod didn't build (all of it is in minecraft-mod-build.log)"
+}
+echo "OK"
+
+echo "== 4/6  Prepare the Minecraft instance and ROM folder"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$here/launcher/setup-prism.ps1")" -Quiet -AllowMissingRom \
+    || fail "Prism couldn't create the MarioCraft instance. Sign in to Prism once, then retry."
+rom_folder_win="$(tr -d '\r\n' < "$here/launcher/rom-folder-path.txt")"
+[ -n "$rom_folder_win" ] || fail "Prism didn't return the MarioCraft ROM folder path."
+rom_folder="$(cygpath -u "$rom_folder_win")"
+mkdir -p "$rom_folder"
+echo
+echo "Your own Super Mario 64 (USA) ROM goes here:"
+echo "  $(cygpath -w "$rom_folder")"
+if ! python3 "$here/tools/prepare-rom.py" "$rom_folder" "$here"; then
+    echo
+    echo "Copy your original USA ROM (.z64, .n64 or .v64) into that folder, then press Enter."
+    read -r
+    python3 "$here/tools/prepare-rom.py" "$rom_folder" "$here" || fail "No verified USA ROM found. MarioCraft does not include one."
+fi
+rom="$rom_folder/baserom.us.z64"
+[ "$(sha1sum "$rom" | cut -d' ' -f1)" = "$ROM_SHA1" ] || fail "the ROM in the Minecraft instance folder couldn't be verified"
+if [ -n "${APPDATA:-}" ]; then
+    appdata="$(cygpath -u "$APPDATA")"
+    mkdir -p "$appdata/sm64coopdx"
+    if [ ! -f "$appdata/sm64coopdx/baserom.us.z64" ] || [ "$(sha1sum "$appdata/sm64coopdx/baserom.us.z64" | cut -d' ' -f1)" != "$ROM_SHA1" ]; then
+        cp "$rom" "$appdata/sm64coopdx/baserom.us.z64"
+    fi
+fi
+echo "OK: personal ROM verified; it stays outside MarioCraft's distributed package."
+
+echo "== 5/6  Super Mario 64 (sm64coopdx + MarioCraft)"
+get_source sm64coopdx "$SM64_REPO" "$SM64_COMMIT" v1.5.1 sm64coopdx.patch
 cp -f "$rom" "$here/sm64coopdx/baserom.us.z64"
 : > "$here/sm64coopdx-build.log"
 if tasklist 2>/dev/null | grep -qi "sm64coopdx.exe"; then
@@ -213,18 +199,10 @@ if [ $built != 1 ]; then
     tail -n 25 "$here/sm64coopdx-build.log"
     fail "SM64 didn't build (the end of the log is above; all of it is in sm64coopdx-build.log). Close other programs and run install.bat again."
 fi
+cp -f "$rom" "$here/sm64coopdx/build/us_pc/baserom.us.z64" || fail "couldn't copy your ROM next to the game executable"
 echo "OK"
 
-echo "== 5/6  The MarioCraft Minecraft mod (SkyCraft + MarioCraft)"
-get_source SkyCraft "$SKY_REPO" "$SKY_COMMIT" skycraft.patch
-echo "Building (Gradle downloads Minecraft 26.3's build files the first time; the log is in minecraft-mod-build.log)..."
-(cd "$here/SkyCraft/fabric" && cmd //c "$(cygpath -w "$here/SkyCraft/fabric/gradlew.bat")" build > "$here/minecraft-mod-build.log" 2>&1) || {
-    tail -n 25 "$here/minecraft-mod-build.log"
-    fail "the Minecraft mod didn't build (all of it is in minecraft-mod-build.log)"
-}
-echo "OK"
-
-echo "== 6/6  Launcher and Prism Launcher"
+echo "== 6/6  Build the MarioCraft launcher"
 bash "$here/launcher/build.sh" || fail "the launcher didn't build"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$here/launcher/setup-prism.ps1")" \
     || fail "Prism Launcher isn't set up: install it from https://prismlauncher.org, sign in to your Microsoft account in it once, then run install.bat again."

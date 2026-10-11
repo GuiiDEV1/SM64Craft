@@ -3,7 +3,8 @@
 MarioCraft's own code is MIT licensed (see `LICENSE`, which also says exactly what it covers).
 
 MarioCraft is distributed as source changes (the `patches` folder) to two other projects. MarioCraft
-doesn't include either of them: the installer downloads both from their own repositories.
+also includes the adapted Fabric mod and a binary delta for the pinned official Windows release.
+The native installer downloads SM64 Coop DX from its authors' release; it does not bundle a complete native executable.
 
 | Project | Version | Where | License |
 |---|---|---|---|
@@ -18,8 +19,9 @@ decompilation (https://github.com/n64decomp/sm64). `patches/sm64coopdx.patch` ad
 files (MIT, ours) and makes small changes to a few existing sm64coopdx files, hooking them into
 MarioCraft. Those existing files, and the lines of them the patch shows, remain sm64coopdx's, under
 its authors' terms; MarioCraft claims no rights in them. MarioCraft follows the practice of
-sm64coopdx mods: it ships only its own changes, and the player builds the game from sm64coopdx's
-repository and their own ROM.
+sm64coopdx mods: it ships patches. Release setup applies a binary delta to the official Windows
+executable, built from the same pinned source plus MarioCraft's source patch without a ROM.
+The optional developer path builds from source. Original project content remains under its authors' terms.
 
 **Downloaded by the Prism Launcher setup** (`launcher/setup-prism.ps1`), each checked against a
 pinned SHA-512 hash:
@@ -27,6 +29,7 @@ pinned SHA-512 hash:
 - Fabric API 0.161.0+26.3: https://modrinth.com/mod/fabric-api (Apache License 2.0)
 - e4mc 6.2.2: https://modrinth.com/mod/e4mc (see its page)
 
-**Game data:** none is included. Super Mario 64's data comes from the player's own ROM at build time.
+**ROM data:** none is included. Super Mario 64's data comes from the player's own ROM at runtime
+in the release setup (or at build time in the optional developer path).
 Minecraft, its assets and C418's music come from the player's own Minecraft: Java Edition, through
 Prism Launcher.

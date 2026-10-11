@@ -134,6 +134,9 @@ static void play_after_setup(DWORD code) {
         return;
     }
     wchar_t sm64[MAX_PATH], sm64Dir[MAX_PATH], prism[MAX_PATH];
+    wchar_t savePath[MAX_PATH], sm64Args[MAX_PATH * 2];
+    ExpandEnvironmentStringsW(L"%APPDATA%\\sm64coopdx", savePath, MAX_PATH);
+    swprintf(sm64Args, MAX_PATH * 2, L"--savepath \"%ls\"", savePath);
     path_in_root(sm64, L"sm64coopdx\\build\\us_pc\\sm64coopdx.exe");
     path_in_root(sm64Dir, L"sm64coopdx\\build\\us_pc");
     if (GetFileAttributesW(sm64) == INVALID_FILE_ATTRIBUTES) {
@@ -154,7 +157,7 @@ static void play_after_setup(DWORD code) {
             return;
         }
     }
-    if (!process_running(L"sm64coopdx.exe") && !start(sm64, L"", sm64Dir)) {
+    if (!process_running(L"sm64coopdx.exe") && !start(sm64, sm64Args, sm64Dir)) {
         set_status(L"Couldn't start SM64.");
         return;
     }
