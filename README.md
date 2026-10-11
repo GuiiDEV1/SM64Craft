@@ -1,95 +1,71 @@
 # SM64Craft
 
-**Play Super Mario 64 as Steve, inside Minecraft.** SM64Craft brings the SM64 Coop DX game view into Minecraft and lets Steve explore, fight and build in Mario's worlds.
+**Steve chegou ao Reino do Cogumelo.** SM64Craft coloca a imagem do Super Mario 64 Coop DX dentro da janela do Minecraft e liga os dois jogos: você controla Steve, enquanto os cursos, inimigos e estrelas continuam vindo do SM64.
 
 <p align="center">
-  <img src="docs/screenshots/sm64craft-coop.jpg" alt="Two Minecraft players exploring the Super Mario 64 castle grounds together" width="49%">
-  <img src="docs/screenshots/sm64craft-steve.jpg" alt="Steve in diamond armor on the Super Mario 64 castle grounds" width="49%">
+  <img src="docs/screenshots/sm64craft-coop.jpg" alt="Dois jogadores de Minecraft exploram juntos os jardins do castelo do Super Mario 64" width="49%">
+  <img src="docs/screenshots/sm64craft-steve.jpg" alt="Steve de armadura de diamante diante do castelo" width="49%">
 </p>
 
-**[Download the latest release](https://github.com/GuiiDEV1/SM64Craft/releases/latest)** and put its JAR in your Fabric instance's `mods` folder.
+**[Baixar a versão mais recente](https://github.com/GuiiDEV1/SM64Craft/releases/latest)**
 
-> SM64Craft is experimental fan software. It is not affiliated with Nintendo, Mojang Studios or Microsoft. You must provide your own Super Mario 64 USA ROM; the ROM is never included in the mod or uploaded by the installer.
+> Projeto experimental para Minecraft Java. O download não contém uma ROM nem arquivos de jogo da Nintendo ou da Mojang. Você precisa fornecer sua própria ROM USA de Super Mario 64.
 
-## What it does
+## A ideia
 
-SM64Craft starts a locally installed copy of [SM64 Coop DX](https://github.com/coop-deluxe/sm64coopdx) and displays its game view inside Minecraft. Steve uses Minecraft movement, health, inventory and equipment while interacting with SM64 levels, enemies, courses and bosses.
+O Minecraft cuida do Steve, de seus itens, equipamentos e mundo aberto. O SM64 Coop DX cuida das fases e da lógica de Super Mario 64. O mod mantém os dois lados sincronizados e mostra a imagem do jogo na janela do Minecraft.
 
-- **Move like Mario:** double and triple jumps, long jumps, backflips, wall kicks, ground pounds, poles, cannons, slides and shells.
-- **Fight with Minecraft gear:** swords, axes, bows and the mace work against SM64 enemies and bosses.
-- **Mine and build:** break parts of the SM64 world for Minecraft blocks, then place blocks that have collision in the game world.
-- **Use power-ups:** the wing, metal and vanish caps grant Minecraft-style effects.
-- **Play together:** connect to an SM64 Coop DX session and share the Minecraft world through e4mc.
-- **Keep your files local:** the native game, settings, saves and ROM stay in the active Minecraft instance.
+Na prática, dá para correr, pular, lutar e explorar usando Steve, quebrar partes do cenário para obter blocos e colocar construções que interagem com a geometria do SM64. Espadas, machados, arcos e a mace servem para enfrentar os inimigos. Os movimentos clássicos de Mario também estão disponíveis: salto duplo e triplo, salto longo, mortal para trás, wall kick e ground pound.
 
-## Requirements
+## Preparar e iniciar
 
-- Windows 10 or 11, 64-bit, and an internet connection for the first setup.
-- Minecraft: Java Edition **26.3** with **Fabric Loader** and **Fabric API** already installed in the instance.
-- The instance's Java **25** runtime. Current launchers provide this for Minecraft 26.3.
-- Your own supported Super Mario 64 USA ROM in `.z64`, `.n64` or `.v64` format.
-- About 512 MB of free disk space for setup and the installed game files.
+O instalador automático desta versão funciona no **Windows 10/11 de 64 bits**. Também são necessários Minecraft Java **26.3**, Fabric Loader, Fabric API, Java **25** na instância e conexão com a internet durante a instalação. O JAR não instala Minecraft, Fabric ou Java.
 
-The current automatic installer supports Windows only. It does not install Minecraft, Fabric Loader, Fabric API or Java.
+1. Instale Fabric Loader e Fabric API na instância 26.3 e copie o JAR baixado para a pasta `mods` dessa instância.
+2. Abra o Minecraft e clique em **Instalar dependências** no menu principal. Na tela que abrir, escolha **Abrir pasta sm64craft**.
+3. Copie sua ROM USA para a pasta aberta. São aceitos arquivos `.z64`, `.n64` e `.v64`; o instalador verifica se o arquivo é a versão suportada e cria uma cópia normalizada sem alterar o original.
+4. Volte ao Minecraft e clique em **Instalar dependências**. O botão baixa o lançamento oficial do SM64 Coop DX, aplica a modificação localmente e instala o e4mc na instância.
+5. Quando a instalação terminar, reinicie o Minecraft uma vez para carregar o e4mc. No menu principal, clique no botão do mod para abrir o SM64 Coop DX dentro do Minecraft.
 
-## Installation
+Os arquivos do jogo, a cópia verificada da ROM, os saves do SM64 e o log ficam na pasta `sm64craft` dentro do diretório de jogo da instância. O e4mc fica em `mods`. A instalação de lançamento usa um pacote nativo pronto; não exige que o jogador compile o SM64 Coop DX.
 
-1. Download the latest SM64Craft JAR from [Releases](https://github.com/GuiiDEV1/SM64Craft/releases/latest) and put it in the `mods` folder of your Fabric instance.
-2. Start Minecraft. From the title screen, open the mod's setup screen and choose **Abrir pasta sm64craft** (open the `sm64craft` folder). In the current release, some in-game labels may still say “MarioCraft.”
-3. Copy your own USA ROM into that folder. Return to the setup screen and choose **Instalar dependências** (install dependencies). The installer verifies the ROM and leaves the original dump unchanged.
-4. The installer downloads the official Windows SM64 Coop DX release, applies SM64Craft's verified patch locally, and installs the e4mc multiplayer helper into that instance. It does not include or distribute your ROM or a complete native game executable.
-5. When setup finishes, restart Minecraft once so Fabric can load e4mc. Then open SM64Craft from the title screen.
+## Jogar com amigos
 
-The native game, ROM, SM64 saves and install log are kept in that instance's `.minecraft/sm64craft` directory. The e4mc helper is installed in that instance's `mods` folder. Temporary installer downloads are removed after setup. Release builds use the prebuilt game package, so players do not need a compiler or a source checkout. Setup time depends on the internet connection and computer.
+Todos devem usar a mesma versão do SM64Craft, ter uma instância Fabric compatível e fornecer sua própria ROM USA. O host abre seu mundo Minecraft para LAN e cria a sessão multiplayer no SM64 Coop DX. Os amigos entram na sessão do SM64 pelo menu multiplayer do jogo; a integração encaminha o endereço e4mc e conecta os clientes Minecraft ao mundo do host. Não é necessário criar um servidor Minecraft separado nem configurar encaminhamento de portas no roteador.
 
-## Playing
+O multiplayer passou por testes com vários clientes locais: conexão entre os mundos, inventários, blocos, mortes, progresso de estrelas, reconexão e transições de fase. DDD e WDW foram exercitadas nos dois sentidos. Se precisar conectar manualmente ao endereço e4mc do host, use `/join <endereço>` no chat; `/leave` volta à sua sessão local. Ainda faltam partidas completas entre computadores físicos com contas Microsoft distintas e uma verificação manual de toda a campanha. Consulte o [relatório de validação](docs/MULTIPLAYER-VALIDATION.md) para os testes e limites conhecidos.
 
-Open SM64Craft from Minecraft's title screen. The SM64 Coop DX view appears in the Minecraft window; keep Minecraft focused while playing. Closing Minecraft also closes the native game process.
+## Movimentos adicionais
 
-### Controls
-
-Movement and basic actions use the Minecraft key bindings. Additional moves:
-
-| Action | Controls |
+| Movimento | Como fazer |
 | --- | --- |
-| Double / triple jump | Press Space again as you land; run for the triple jump |
-| Long jump | Shift + Space while running |
-| Backflip | Shift + Space while standing still |
-| Wall kick | Press Space in the air against a wall |
-| Ground pound | Hold Shift as you land from a jump or fall |
-| Talk or pick up an object | Right-click |
-| Steer a slide, cannon or shell | WASD and mouse; Space jumps off |
-| SM64 pause menu / Exit Course | P |
-| First- / third-person camera | F5 |
-| Debug status line | F7 |
+| Salto duplo ou triplo | Pressione Espaço novamente ao aterrissar; corra para o triplo |
+| Salto longo | Shift + Espaço enquanto corre |
+| Mortal para trás | Shift + Espaço parado |
+| Wall kick | Espaço no ar, junto a uma parede |
+| Ground pound | Segure Shift durante a aterrissagem |
+| Conversar ou pegar um objeto | Botão direito do mouse |
+| Controlar slide, canhão ou casco | WASD e mouse; Espaço para sair |
+| Pausa / sair da fase | P |
+| Alternar câmera | F5 |
+| Mostrar estado para diagnóstico | F7 |
 
-### Multiplayer
+## Onde ficam seus dados
 
-Each player needs the same SM64Craft release, a compatible Fabric instance, their own USA ROM and a Minecraft Java account. The host opens their Minecraft world to LAN and hosts an SM64 Coop DX session; friends join that SM64 session through its multiplayer menu. The Minecraft clients then connect through the host's e4mc link. A separate Minecraft server and manual port forwarding are not part of the setup.
+- **Progresso e ROM:** `sm64craft/` no diretório de jogo da instância. O arquivo reconhecido fica como `baserom.us.z64` e o progresso do SM64 fica em `saves/`.
+- **Mundos Minecraft:** continuam na pasta `saves/` normal da instância.
+- **Log de instalação:** `sm64craft/install.log`.
 
-Multiplayer is experimental. Local multi-client checks covered world access, phase transitions, blocks, inventory, deaths, star progress and reconnects. Scripted tests also exercised the DDD and WDW passages. Play between separate PCs with Microsoft accounts, manually walking every course route, the complete campaign and every boss have not all been verified. See the [multiplayer validation report](docs/MULTIPLAYER-VALIDATION.md) for details and limits. Use the same mod and native game build on every computer.
+Para remover o SM64Craft, feche o Minecraft e apague o JAR do mod em `mods`. A instalação também coloca o JAR do e4mc nessa pasta; remova-o caso não o utilize com outros mods. Apagar `sm64craft/` remove o jogo nativo, os saves do SM64 e tudo que você guardou nessa pasta, inclusive os arquivos de ROM. Faça uma cópia dos dados que quiser preservar antes de removê-la.
 
-## Saves and files
+## Limites conhecidos
 
-- **SM64 progress and ROM:** the active instance's `.minecraft/sm64craft` folder.
-- **Minecraft worlds:** the instance's normal `saves` folder.
-- **ROM filename after verification:** `sm64craft/baserom.us.z64`. The source file you copied is preserved beside it.
-- **Install log:** `sm64craft/install.log`.
+O SM64Craft ainda está em desenvolvimento. Os testes de multiplayer e de passagens entre fases não equivalem a concluir cada curso manualmente. Contas oficiais em computadores separados, todos os chefes, toda a campanha e quedas prolongadas de conexão ainda precisam de validação adicional. Alguns textos da interface do pacote atual podem conservar nomes internos anteriores.
 
-To remove SM64Craft, close Minecraft and delete its JAR from `mods`. To also remove the installed native game, ROM and SM64 saves, delete that instance's `.minecraft/sm64craft` folder. The installer also places e4mc in `mods`; remove that JAR too if you do not use it with another mod.
+Encontrou um problema? Abra uma [issue no GitHub](https://github.com/GuiiDEV1/SM64Craft/issues) e, se possível, inclua `sm64craft/install.log` ou `logs/latest.log` da instância.
 
-## Troubleshooting
+## Créditos e licenças
 
-- **The setup screen cannot find a ROM:** copy a supported USA ROM into the `sm64craft` folder opened by the setup screen, then retry. Only the supported USA revision passes verification.
-- **Setup failed:** open `sm64craft/install.log` in the active instance directory. Temporary downloads are cleaned up; after correcting the reported issue, try installation again.
-- **Multiplayer does not connect:** restart Minecraft once after installation, check that e4mc loaded, and allow Java through Windows Firewall on private networks if prompted.
-- **The mod does not load:** confirm that the instance is Minecraft 26.3 with Fabric Loader, Fabric API and Java 25, then check that instance's `logs/latest.log`.
-- **Found a bug?** [Open an issue](https://github.com/GuiiDEV1/SM64Craft/issues).
+O jogo nativo vem do [SM64 Coop DX](https://github.com/coop-deluxe/sm64coopdx), da equipe Coop Deluxe. A integração que permite exibir outro jogo dentro do Minecraft começou no [SkyCraft](https://github.com/chasmlol/SkyCraft), de chasm. Este projeto também utiliza Fabric, Fabric API e e4mc.
 
-## Credits and licenses
-
-- [SM64 Coop DX](https://github.com/coop-deluxe/sm64coopdx) by the Coop Deluxe team, built on the [Super Mario 64 decompilation](https://github.com/n64decomp/sm64).
-- [SkyCraft](https://github.com/chasmlol/SkyCraft) by chasm is the foundation for rendering another game inside Minecraft. Its shared-memory bridge is credited to its original author and remains under its own license.
-- [Fabric](https://fabricmc.net), [Fabric API](https://github.com/FabricMC/fabric), [e4mc](https://github.com/vgskye/e4mc-minecraft-architectury) and [Prism Launcher](https://prismlauncher.org).
-
-SM64Craft's code is under the MIT License (`LICENSE`). Third-party code and assets retain their own terms; see [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) and the `licenses` folder. No Nintendo game data or Minecraft game data is included. You need your own copy of each game and your own ROM.
+O código próprio do SM64Craft está sob MIT (`LICENSE`). Cada dependência conserva sua licença; consulte [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) e `licenses/`. SM64Craft não é afiliado à Nintendo, Mojang Studios ou Microsoft. Use cópias dos jogos que você possui e não distribua ROMs.
